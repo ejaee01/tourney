@@ -159,6 +159,7 @@
   let replayEndWhiteClockMs = 0;
   let replayEndBlackClockMs = 0;
   let replayIncrementMs = 2000;
+  let replayHasFullMoveTimes = false;
   let pendingPremove = null;
   let premoveSubmitting = false;
   let rightDragStart = null;
@@ -222,6 +223,12 @@
 
   function replayClocksAtPly(ply) {
     const clamped = Math.max(0, Math.min(Number(ply) || 0, allMoves.length));
+    if (!replayHasFullMoveTimes) {
+      return {
+        white: Math.max(0, Number(replayEndWhiteClockMs) || 0),
+        black: Math.max(0, Number(replayEndBlackClockMs) || 0),
+      };
+    }
     const inc = Math.max(0, Number(replayIncrementMs) || 0);
     let wc = Math.max(0, Number(replayEndWhiteClockMs) || 0);
     let bc = Math.max(0, Number(replayEndBlackClockMs) || 0);
@@ -652,7 +659,9 @@
     replayIncrementMs = Math.max(0, Number(data.increment_ms) || 0);
 
     allMoves = (data.pgn_moves || '').split(' ').filter(Boolean);
-    moveTimesMs = Array.isArray(data.move_times_ms_list) ? data.move_times_ms_list.map((v) => Math.max(0, Number(v) || 0)) : [];
+    const rawMoveTimes = Array.isArray(data.move_times_ms_list) ? data.move_times_ms_list : [];
+    replayHasFullMoveTimes = rawMoveTimes.length >= allMoves.length;
+    moveTimesMs = rawMoveTimes.map((v) => Math.max(0, Number(v) || 0));
     while (moveTimesMs.length < allMoves.length) moveTimesMs.push(0);
     if (moveTimesMs.length > allMoves.length) moveTimesMs = moveTimesMs.slice(0, allMoves.length);
     if (allMoves.length !== previousMoveCount) clearUserAnnotations(false);
