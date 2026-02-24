@@ -228,3 +228,12 @@ class RatingHistory(db.Model):
 
     player = db.relationship("Player")
     tournament = db.relationship("Tournament")
+
+
+class Presence(db.Model):
+    __tablename__ = "presence"
+
+    player_id = db.Column(db.Integer, db.ForeignKey("players.id"), primary_key=True)
+    last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    player = db.relationship("Player")

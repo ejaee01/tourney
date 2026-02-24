@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 import chess
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 
-from models import db, Player, Tournament, TournamentPlayer, Game, RatingHistory, PairingHistory, TITLES
+from models import db, Player, Tournament, TournamentPlayer, Game, RatingHistory, PairingHistory, TITLES, Presence
 from arena import ArenaEngine
 
 app = Flask(__name__)
@@ -23,6 +23,11 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "connect_args": {"connect_timeout": 10} if _db_url.startswith("postgresql") else {},
 }
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "arena-secret-change-in-prod")
+
+ONLINE_WINDOW_SECONDS = int(os.environ.get("ONLINE_WINDOW_SECONDS", "25"))
+PRESENCE_TOUCH_MIN_INTERVAL_SECONDS = int(
+    os.environ.get("PRESENCE_TOUCH_MIN_INTERVAL_SECONDS", "10")
+)
 
 db.init_app(app)
 
@@ -57,6 +62,33 @@ engine.start()
 @login_manager.user_loader
 def load_user(user_id):
     return Player.query.get(int(user_id))
+
+
+def _touch_presence():
+    if not current_user.is_authenticated:
+        return
+
+    now = datetime.utcnow()
+    last = session.get("presence_ts")
+    if isinstance(last, int) and (now.timestamp() - last) < PRESENCE_TOUCH_MIN_INTERVAL_SECONDS:
+        return
+
+    session["presence_ts"] = int(now.timestamp())
+    try:
+        row = Presence.query.get(current_user.id)
+        if row:
+            row.last_seen_at = now
+        else:
+            db.session.add(Presence(player_id=current_user.id, last_seen_at=now))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+@app.before_request
+def _presence_before_request():
+    if request.path.startswith("/api/") and request.path != "/api/ping":
+        _touch_presence()
 
 
 def _performance_last_3_tournaments(player_id):
@@ -148,24 +180,32 @@ def logout():
 
 @app.route("/api/stats")
 def site_stats():
-    total_games = Game.query.filter(Game.result != "ongoing").count()
-    online_player_ids = set()
-    ongoing_games = Game.query.filter_by(result="ongoing").all()
-    for g in ongoing_games:
-        online_player_ids.add(g.white_id)
-        online_player_ids.add(g.black_id)
-    queued = TournamentPlayer.query.filter_by(in_queue=True, active=True).all()
-    for tp in queued:
-        online_player_ids.add(tp.player_id)
-    return jsonify({
-        "total_games": total_games,
-        "players_online": len(online_player_ids),
-    })
+    total_games_played = Game.query.filter(Game.result != "ongoing").count()
+    cutoff = datetime.utcnow() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+    players_online = Presence.query.filter(Presence.last_seen_at >= cutoff).count()
+    return jsonify(
+        {
+            "total_games_played": total_games_played,
+            "total_games": total_games_played,  # backwards-compatible key
+            "players_online": players_online,
+        }
+    )
+
+
+@app.route("/api/ping")
+def ping():
+    return ("", 204, {"Cache-Control": "no-store"})
 
 
 @app.route("/api/players")
 def list_players():
-    players = Player.query.order_by(Player.rating.desc()).all()
+    limit = request.args.get("limit", type=int)
+    limit = min(200, max(1, limit)) if limit else None
+
+    q = Player.query.order_by(Player.rating.desc())
+    if limit:
+        q = q.limit(limit)
+    players = q.all()
     return jsonify([p.to_dict() for p in players])
 
 

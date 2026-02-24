@@ -176,8 +176,9 @@
     const maxR = Math.max(...points.map(p => p.rating));
     const span = Math.max(1, maxR - minR);
 
+    const step = w / Math.max(1, points.length);
     const pts = points.map((p, i) => {
-      const x = (i / Math.max(1, points.length - 1)) * w;
+      const x = (i + 0.5) * step;
       const y = h - ((p.rating - minR) / span) * h;
       return { x, y, rating: p.rating };
     });
@@ -219,14 +220,17 @@
     `;
   }
 
-  async function loadChart() {
-    const res = await fetch('/api/me/rating-history?days=90', { credentials: 'same-origin' });
-    const points = await res.json();
-    drawLineChart(document.getElementById('rating-chart'), points);
+  let ratingPointsCache = null;
+  async function loadChart(force=false) {
+    if (force || !ratingPointsCache) {
+      const res = await fetch('/api/me/rating-history?days=90', { credentials: 'same-origin' });
+      ratingPointsCache = await res.json();
+    }
+    drawLineChart(document.getElementById('rating-chart'), ratingPointsCache);
   }
 
-  loadChart();
-  window.addEventListener('resize', loadChart);
+  loadChart(true);
+  window.addEventListener('resize', () => loadChart(false));
 </script>
 </body>
 </html>

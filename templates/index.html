@@ -179,7 +179,7 @@
     <div id="ping-bars" class="ping-bars down"><span></span><span></span><span></span><span></span></div>
     <div id="ping-text" style="color:#333;font-weight:bold;">-- ms</div>
   </div>
-  <div class="ping-stat">Games: <span id="stat-games">—</span></div>
+  <div class="ping-stat">Total games played: <span id="stat-games">—</span></div>
   <div class="ping-stat"><span class="online-dot"></span>Online: <span id="stat-online">—</span></div>
 </div>
 
@@ -219,8 +219,8 @@
   }
 
   async function loadPlayers() {
-    const list = await api('/api/players');
-    document.getElementById('p-list').innerHTML = list.slice(0,10).map((p,i)=>{
+    const list = await api('/api/players?limit=10');
+    document.getElementById('p-list').innerHTML = list.map((p,i)=>{
       const tc = p.title ? `<span style="color:${TITLE_COLORS[p.title]||'#333'};font-weight:bold;font-size:0.8rem;margin-right:3px;">${p.title}</span>` : '';
       return `<tr>
         <td>${i+1}</td>
@@ -255,8 +255,9 @@
     const maxR = Math.max(...points.map(p => p.rating));
     const span = Math.max(1, maxR - minR);
 
+    const step = w / Math.max(1, points.length);
     const pts = points.map((p, i) => ({
-      x: (i / Math.max(1, points.length - 1)) * w,
+      x: (i + 0.5) * step,
       y: h - ((p.rating - minR) / span) * h,
       rating: p.rating,
     }));
@@ -296,10 +297,13 @@
       </div>`;
   }
 
-  async function loadEloChart() {
+  let eloPointsCache = null;
+  async function loadEloChart(force=false) {
     {% if current_user.is_authenticated %}
-    const points = await api('/api/me/rating-history?days=90');
-    drawLineChart(document.getElementById('elo-chart'), points);
+    if (force || !eloPointsCache) {
+      eloPointsCache = await api('/api/me/rating-history?days=90');
+    }
+    drawLineChart(document.getElementById('elo-chart'), eloPointsCache);
     {% endif %}
   }
 
@@ -318,31 +322,38 @@
   }
 
   async function updatePingAndStats() {
-    const start = performance.now();
     try {
-      const statsRes = await fetch('/api/stats', { credentials: 'same-origin', cache: 'no-store' });
+      const start = performance.now();
+      const r = await fetch('/api/ping', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) throw new Error();
       const ms = Math.round(performance.now() - start);
       renderPing(ms, true);
-      if (statsRes.ok) {
-        const stats = await statsRes.json();
-        document.getElementById('stat-games').textContent = stats.total_games.toLocaleString();
-        document.getElementById('stat-online').textContent = stats.players_online;
-      }
     } catch (e) {
       renderPing(null, false);
+    }
+
+    try {
+      const statsRes = await fetch('/api/stats', { credentials: 'same-origin', cache: 'no-store' });
+      if (!statsRes.ok) throw new Error();
+      const stats = await statsRes.json();
+      const totalGames = stats.total_games_played ?? stats.total_games;
+      document.getElementById('stat-games').textContent = (totalGames ?? 0).toLocaleString();
+      document.getElementById('stat-online').textContent = stats.players_online ?? '—';
+    } catch (e) {
+      // ignore
     }
   }
 
   loadTournaments();
   loadPlayers();
   checkActiveGame();
-  loadEloChart();
+  loadEloChart(true);
   updatePingAndStats();
 
   setInterval(loadTournaments, 10000);
   setInterval(checkActiveGame, 5000);
   setInterval(updatePingAndStats, 5000);
-  window.addEventListener('resize', loadEloChart);
+  window.addEventListener('resize', () => loadEloChart(false));
 </script>
 </body>
 </html>
