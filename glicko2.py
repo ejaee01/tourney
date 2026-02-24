@@ -123,27 +123,35 @@ def expected_score(rating_a, rd_a, rating_b, rd_b):
     return _E(mu_a, mu_b, phi_b)
 
 
-def performance_rating(opponent_ratings, scores):
+def performance_rating(opponent_ratings, scores, prior_rating=None, prior_games=6):
     """
-    Estimate performance rating given a list of opponent ratings and scores (1/0.5/0).
-    Uses a capped logistic inversion around average opponent rating.
+    Estimate performance rating from opponents + results.
+
+    A small prior is mixed in so the first few games do not produce extreme
+    values (for example, one win should not immediately jump to "elite").
     """
     if not opponent_ratings:
-        return 1500
+        return round(prior_rating) if prior_rating is not None else 0
 
     n = len(opponent_ratings)
     avg_opp = sum(opponent_ratings) / n
     actual = max(0.0, min(float(sum(scores)), float(n)))
-    score_frac = actual / n
 
-    # Perfect/zero scores imply infinite Elo difference in pure logistic math.
-    # Cap to a practical tournament-performance range.
+    # Shrink early performance toward a prior expectation based on current
+    # player strength relative to field strength.
+    prior_n = max(0.0, float(prior_games))
+    if prior_n > 0:
+        anchor = float(prior_rating) if prior_rating is not None else float(avg_opp)
+        prior_exp = 1.0 / (1.0 + 10.0 ** ((avg_opp - anchor) / 400.0))
+        actual += prior_n * prior_exp
+        n_eff = n + prior_n
+    else:
+        n_eff = float(n)
+
+    score_frac = max(1e-6, min(1.0 - 1e-6, actual / n_eff))
+
+    # Pure logistic inversion can explode at the extremes; cap to practical range.
     max_delta = 800.0
-    if score_frac <= 0.0:
-        return round(avg_opp - max_delta)
-    if score_frac >= 1.0:
-        return round(avg_opp + max_delta)
-
     delta = -400.0 * math.log10((1.0 / score_frac) - 1.0)
     delta = max(-max_delta, min(max_delta, delta))
     return round(avg_opp + delta)

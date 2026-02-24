@@ -110,8 +110,8 @@ class ArenaEngine:
             self._apply_score(tp_black, "draw", False)
             white_score_val, black_score_val = 0.5, 0.5
 
-        self._update_performance(tp_white, game.black.rating, white_score_val)
-        self._update_performance(tp_black, game.white.rating, black_score_val)
+        self._update_performance(tp_white)
+        self._update_performance(tp_black)
 
         tp_white.in_queue = True
         tp_white.queue_joined_at = datetime.utcnow()
@@ -253,7 +253,7 @@ class ArenaEngine:
 
         tp.games_played += 1
 
-    def _update_performance(self, tp, opp_rating, score):
+    def _update_performance(self, tp):
         games = Game.query.filter(
             Game.tournament_id == tp.tournament_id,
             db.or_(
@@ -274,7 +274,12 @@ class ArenaEngine:
                 scores.append(1.0 if g.result == "black" else (0.5 if g.result == "draw" else 0.0))
 
         if opp_ratings:
-            tp.performance_rating = performance_rating(opp_ratings, scores)
+            tp.performance_rating = performance_rating(
+                opp_ratings,
+                scores,
+                prior_rating=tp.player.rating,
+                prior_games=6,
+            )
 
     def _finish_tournament(self, tournament):
         tournament.status = "finished"
