@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arena Tournaments</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f5f3ef; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; }
+    header { background: #fff; padding: 10px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    header h1 { font-size: 1.4rem; color: #333; letter-spacing: -0.5px; }
+    .nav { margin-left: auto; display: flex; gap: 14px; align-items: center; font-size: 0.9rem; }
+    .nav a { color: #629924; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .nav .username { color: #333; font-weight: bold; }
+    .nav .rating-badge { color: #666; }
+    .container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 4px; padding: 20px; margin-bottom: 18px; border: 1px solid #ddd; }
+    .card h2 { color: #333; margin-bottom: 14px; font-size: 1rem; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+    label { display: block; margin-bottom: 4px; font-size: 0.82rem; color: #555; font-weight: 600; }
+    input, select { width: 100%; padding: 7px 10px; background: #fff; border: 1px solid #bbb; border-radius: 3px; color: #333; font-size: 0.93rem; margin-bottom: 10px; }
+    input:focus, select:focus { outline: none; border-color: #759900; box-shadow: 0 0 0 2px rgba(117,153,0,.15); }
+    button { background: #759900; color: #fff; border: none; padding: 9px 18px; border-radius: 3px; cursor: pointer; font-size: 0.93rem; font-weight: 600; }
+    button:hover { background: #618200; }
+    button.secondary { background: #eee; color: #333; border: 1px solid #ccc; }
+    button.secondary:hover { background: #e0e0e0; }
+    .msg { margin-top: 7px; font-size: 0.83rem; color: #759900; }
+    .msg.err { color: #c62828; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 7px 10px; color: #777; font-size: 0.78rem; text-transform: uppercase; border-bottom: 1px solid #eee; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 0.88rem; }
+    tr:hover td { background: #f8f7f5; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.74rem; font-weight: 600; }
+    .badge.waiting  { background: #e8f5e9; color: #388e3c; border: 1px solid #c8e6c9; }
+    .badge.active   { background: #fce4ec; color: #c62828; border: 1px solid #ffcdd2; }
+    .badge.finished { background: #f5f5f5; color: #999; border: 1px solid #e0e0e0; }
+    a { color: #629924; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+    .alert { background: #fffde7; border: 1px solid #f9a825; color: #5d4037; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .alert a { color: #e65100; font-weight: bold; }
+    .guest-note { background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; font-size: 0.88rem; }
+    .guest-note a { color: #1b5e20; font-weight: bold; }
+    .perf-highlight { font-size: 1.3rem; font-weight: bold; color: #333; }
+    .profile-btn { display: inline-block; margin-top: 14px; background: #759900; color: #fff; padding: 9px 16px; border-radius: 3px; font-size: 0.9rem; text-decoration: none; font-weight: 600; }
+    .profile-btn:hover { background: #618200; text-decoration: none; }
+    .chart-wrap { height: 180px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px; }
+    .title-badge { font-weight: bold; font-size: 0.8rem; margin-right: 3px; }
+    #ping-bar {
+      position: fixed; left: 14px; bottom: 14px;
+      background: #fff; border: 1px solid #ccc;
+      border-radius: 4px; padding: 10px 14px;
+      font-size: 0.8rem; display: flex; flex-direction: column; gap: 6px;
+      z-index: 20; min-width: 165px; box-shadow: 0 2px 6px rgba(0,0,0,.1);
+    }
+    .ping-row { display: flex; align-items: center; gap: 8px; }
+    .ping-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+    .ping-bars span { width: 4px; background: #ccc; border-radius: 2px; }
+    .ping-bars span:nth-child(1) { height: 4px; }
+    .ping-bars span:nth-child(2) { height: 6px; }
+    .ping-bars span:nth-child(3) { height: 9px; }
+    .ping-bars span:nth-child(4) { height: 12px; }
+    .ping-bars.good span { background: #759900; }
+    .ping-bars.medium span:nth-child(-n+3) { background: #e07000; }
+    .ping-bars.medium span:nth-child(4) { background: #ccc; }
+    .ping-bars.bad span:nth-child(-n+2) { background: #c62828; }
+    .ping-bars.bad span:nth-child(n+3) { background: #ccc; }
+    .ping-bars.down span { background: #ccc; }
+    .ping-stat { color: #777; font-size: 0.78rem; }
+    .ping-stat span { color: #333; font-weight: bold; }
+    .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #759900; display: inline-block; margin-right: 3px; }
+    .admin-link { margin-left: 10px; background: #c62828; color: #fff; padding: 4px 10px; border-radius: 3px; font-size: 0.82rem; font-weight: bold; }
+    .admin-link:hover { background: #b71c1c; text-decoration: none; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>♟ Arena</h1>
+  <div class="nav">
+    {% if current_user.is_authenticated %}
+      {% if current_user.title %}
+        <span class="title-badge" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(current_user.title,'#333') }}">{{ current_user.title }}</span>
+      {% endif %}
+      <span class="username">{{ current_user.username }}</span>
+      <span class="rating-badge">{{ current_user.rating | int }}</span>
+      {% if current_user.is_admin %}
+        <a href="/admin" class="admin-link">Admin</a>
+      {% endif %}
+      <a href="/logout">Log out</a>
+    {% else %}
+      <a href="/login">Log in</a>
+      <a href="/register" style="background:#759900;color:#fff;padding:6px 14px;border-radius:3px;font-weight:600;text-decoration:none;">Register</a>
+    {% endif %}
+  </div>
+</header>
+
+<div class="container">
+
+  <div id="game-alert" style="display:none" class="alert">
+    ♟ You have an active game! <a id="game-link" href="#">Go to board →</a>
+  </div>
+
+  {% if not current_user.is_authenticated %}
+  <div class="guest-note">
+    <a href="/register">Register</a> or <a href="/login">log in</a> to join tournaments and play games.
+  </div>
+  {% endif %}
+
+  <div class="grid2">
+    {% if current_user.is_authenticated %}
+    <div class="card">
+      <h2>Your Stats</h2>
+      <table>
+        <tr><td style="color:#777">Rating</td><td style="font-weight:bold;font-size:1.1rem;">{{ current_user.rating | int }}</td></tr>
+        <tr><td style="color:#777">RD</td><td>{{ "%.1f" | format(current_user.rd) }}</td></tr>
+        <tr><td style="color:#777">Games played</td><td>{{ current_user.games_played }}</td></tr>
+        <tr>
+          <td style="color:#777">Performance (last 3)</td>
+          <td><span class="perf-highlight" id="perf-last-3">—</span></td>
+        </tr>
+      </table>
+      <a class="profile-btn" href="/profile/{{ current_user.id }}">View Full Profile →</a>
+    </div>
+    {% endif %}
+
+    {% if current_user.is_authenticated %}
+    <div class="card">
+      <h2>Create Tournament</h2>
+      <label>Name</label>
+      <input id="t-name" placeholder="Blitz Arena" />
+      <label>Duration (minutes)</label>
+      <input id="t-dur" type="number" value="60" min="5" max="180" />
+      <label>Time Control</label>
+      <select id="t-tc">
+        <option value="1+0">1+0 Bullet</option>
+        <option value="2+1">2+1 Bullet</option>
+        <option value="3+0">3+0 Blitz</option>
+        <option value="3+2" selected>3+2 Blitz</option>
+        <option value="5+0">5+0 Blitz</option>
+        <option value="5+3">5+3 Blitz</option>
+        <option value="10+0">10+0 Rapid</option>
+      </select>
+      <label>Starts in (minutes)</label>
+      <input id="t-start" type="number" value="5" min="1" />
+      <button onclick="createTournament()">Create</button>
+      <div id="t-msg" class="msg"></div>
+    </div>
+    {% endif %}
+
+    {% if current_user.is_authenticated %}
+    <div class="card">
+      <h2>Quick Play</h2>
+      <label>Time Control</label>
+      <select id="qp-tc">
+        <option value="1+0">1+0 Bullet</option>
+        <option value="2+1">2+1 Bullet</option>
+        <option value="3+0">3+0 Blitz</option>
+        <option value="3+2" selected>3+2 Blitz</option>
+        <option value="5+0">5+0 Blitz</option>
+        <option value="5+3">5+3 Blitz</option>
+        <option value="10+0">10+0 Rapid</option>
+      </select>
+      <button onclick="quickJoin()">Find Human Match</button>
+      <button class="secondary" onclick="quickLeave()">Cancel</button>
+      <hr style="border:none;border-top:1px solid #eee;margin:12px 0;" />
+      <label>Play vs Bot</label>
+      <select id="qp-bot"></select>
+      <button onclick="playBot()">Play Bot</button>
+      <div id="qp-msg" class="msg"></div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if current_user.is_authenticated %}
+  <div class="card">
+    <h2>Elo Graph <span style="color:#aaa;font-size:0.82rem;font-weight:normal;">last 90 days</span></h2>
+    <div id="elo-chart" class="chart-wrap"></div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Tournaments</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Name</th><th>Time Control</th><th>Status</th><th>Ends</th><th></th></tr>
+      </thead>
+      <tbody id="t-list"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Top Players</h2>
+    <table>
+      <thead><tr><th>#</th><th>Player</th><th>Rating</th><th>Games</th></tr></thead>
+      <tbody id="p-list"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div id="ping-bar">
+  <div class="ping-row">
+    <div id="ping-bars" class="ping-bars down"><span></span><span></span><span></span><span></span></div>
+    <div id="ping-text" style="color:#333;font-weight:bold;">-- ms</div>
+  </div>
+  <div class="ping-stat">Total games played: <span id="stat-games">—</span></div>
+  <div class="ping-stat"><span class="online-dot"></span>Online: <span id="stat-online">—</span></div>
+</div>
+
+<script>
+  const TITLE_COLORS = {GM:'#f01010',IM:'#e07000',FM:'#c0a000',CM:'#8888aa',NM:'#999',WGM:'#e01080',WIM:'#e07000',WFM:'#c0a000',WCM:'#8888aa',BOT:'#4e94d4'};
+
+  async function api(url, method='GET', body=null) {
+    const opts = { method, headers:{'Content-Type':'application/json'}, credentials:'same-origin' };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    return r.json();
+  }
+
+  async function createTournament() {
+    const msg = document.getElementById('t-msg');
+    const res = await api('/api/tournaments','POST',{
+      name: document.getElementById('t-name').value || 'Arena',
+      duration_minutes: +document.getElementById('t-dur').value,
+      time_control: document.getElementById('t-tc').value,
+      start_in_minutes: +document.getElementById('t-start').value,
+    });
+    if (res.error) { msg.textContent=res.error; msg.className='msg err'; }
+    else { msg.textContent=`Created! ID: ${res.id}`; msg.className='msg'; loadTournaments(); }
+  }
+
+  async function loadTournaments() {
+    const list = await api('/api/tournaments');
+    document.getElementById('t-list').innerHTML = list.map(t=>`
+      <tr>
+        <td>${t.id}</td>
+        <td><a href="/tournament/${t.id}">${t.name}</a></td>
+        <td>${t.time_control}</td>
+        <td><span class="badge ${t.status}">${t.status}</span></td>
+        <td>${t.ends_at ? new Date(t.ends_at+'Z').toLocaleTimeString() : '—'}</td>
+        <td><a href="/tournament/${t.id}">View →</a></td>
+      </tr>`).join('');
+  }
+
+  async function loadPlayers() {
+    const list = await api('/api/players?limit=10');
+    document.getElementById('p-list').innerHTML = list.map((p,i)=>{
+      const tc = p.title ? `<span style="color:${TITLE_COLORS[p.title]||'#333'};font-weight:bold;font-size:0.8rem;margin-right:3px;">${p.title}</span>` : '';
+      // use provided rank (should match i+1 but keeps things consistent)
+      const rank = p.rank || (i+1);
+      return `<tr>
+        <td>${rank}</td>
+        <td>${tc}<a href="/profile/${p.id}">${p.username}</a>${p.provisional?' <sup style="color:#999">?</sup>':''}</td>
+        <td style="font-weight:bold;">${p.rating}${p.rank?` (#${p.rank})`:''}</td>
+        <td style="color:#777">${p.games_played}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function checkActiveGame() {
+    {% if current_user.is_authenticated %}
+    const me = await api('/api/me');
+    const perfEl = document.getElementById('perf-last-3');
+    if (perfEl) perfEl.textContent = me.performance_last_3 != null ? me.performance_last_3 : '—';
+    if (me.active_game_id) {
+      document.getElementById('game-alert').style.display = 'flex';
+      document.getElementById('game-link').href = `/game/${me.active_game_id}`;
+    }
+    {% endif %}
+  }
+
+  async function loadBots() {
+    {% if current_user.is_authenticated %}
+    const sel = document.getElementById('qp-bot');
+    if (!sel) return;
+    const list = await api('/api/bots?limit=50');
+    if (!list.length) {
+      sel.innerHTML = '<option value="">No bots yet (create in Admin)</option>';
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = list.map(b => `<option value="${b.id}">${b.username} (${b.rating}${b.rank?` #${b.rank}`:''})</option>`).join('');
+    {% endif %}
+  }
+
+  async function quickJoin() {
+    const msg = document.getElementById('qp-msg');
+    msg.textContent = 'Finding match…';
+    msg.className = 'msg';
+    const tc = document.getElementById('qp-tc').value;
+    const res = await api('/api/casual/join', 'POST', { time_control: tc });
+    if (res.error) {
+      msg.textContent = res.error;
+      msg.className = 'msg err';
+      if (res.game_id) {
+        msg.innerHTML += ` <a href="/game/${res.game_id}">Open game →</a>`;
+      }
+      return;
+    }
+    if (res.matched && res.game_id) {
+      window.location = `/game/${res.game_id}`;
+      return;
+    }
+    msg.textContent = 'Queued. Leave this tab open while waiting.';
+  }
+
+  async function quickLeave() {
+    const msg = document.getElementById('qp-msg');
+    await api('/api/casual/leave', 'POST', {});
+    msg.textContent = 'Canceled.';
+    msg.className = 'msg';
+  }
+
+  async function playBot() {
+    const msg = document.getElementById('qp-msg');
+    msg.textContent = '';
+    msg.className = 'msg';
+    const botSel = document.getElementById('qp-bot');
+    const botId = +(botSel && botSel.value);
+    if (!botId) {
+      msg.textContent = 'Select a bot first.';
+      msg.className = 'msg err';
+      return;
+    }
+    const tc = document.getElementById('qp-tc').value;
+    const res = await api('/api/casual/play-bot', 'POST', { bot_id: botId, time_control: tc });
+    if (res.error) {
+      msg.textContent = res.error;
+      msg.className = 'msg err';
+      if (res.game_id) msg.innerHTML += ` <a href="/game/${res.game_id}">Open game →</a>`;
+      return;
+    }
+    window.location = `/game/${res.game_id}`;
+  }
+
+  function fmtDate(ts) {
+    if (!ts || typeof ts !== 'string') return '—';
+    const iso = ts.endsWith('Z') || /[+-]\\d{2}:\\d{2}$/.test(ts) ? ts : (ts + 'Z');
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function drawLineChart(container, points) {
+    if (!container) return;
+    if (!points || !points.length) {
+      container.innerHTML = '<div style="color:#aaa;font-size:0.85rem;padding-top:8px;">No rating history yet.</div>';
+      return;
+    }
+    const w = container.clientWidth - 20;
+    const h = container.clientHeight - 28;
+    const firstR = points[0].rating;
+    const maxDev = Math.max(...points.map(p => Math.abs(p.rating - firstR)));
+    const pad = Math.max(1, Math.ceil(maxDev * 1.1));
+    const minR = firstR - pad;
+    const maxR = firstR + pad;
+    const span = Math.max(1, maxR - minR);
+
+    const step = w / Math.max(1, points.length);
+    const pts = points.map((p, i) => ({
+      x: (i + 0.5) * step,
+      y: h - ((p.rating - minR) / span) * h,
+      rating: p.rating,
+    }));
+
+    const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const area = [
+      `M ${pts[0].x.toFixed(1)},${h}`,
+      ...pts.map(p => `L ${p.x.toFixed(1)},${p.y.toFixed(1)}`),
+      `L ${pts[pts.length-1].x.toFixed(1)},${h}`, 'Z'
+    ].join(' ');
+
+    const last = pts[pts.length - 1];
+    const gridRatings = [minR, Math.round((minR+maxR)/2), maxR];
+    const gridLines = gridRatings.map(val => {
+      const gy = h - ((val - minR) / span) * h;
+      return `<line x1="0" y1="${gy.toFixed(1)}" x2="${w}" y2="${gy.toFixed(1)}" stroke="#e0e0e0" stroke-width="1"/>
+              <text x="2" y="${(gy - 3).toFixed(1)}" fill="#aaa" font-size="9">${val}</text>`;
+    }).join('');
+
+    container.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h + 4}" width="100%" height="${h + 4}">
+        <defs>
+          <linearGradient id="eloGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#759900" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#759900" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        ${gridLines}
+        <path d="${area}" fill="url(#eloGrad)" />
+        <polyline fill="none" stroke="#759900" stroke-width="2" stroke-linejoin="round" points="${polyline}" />
+        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="#759900" />
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#aaa;margin-top:3px;">
+        <span>${fmtDate(points[0].timestamp)}</span>
+        <span style="color:#759900;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
+        <span>${fmtDate(points[points.length-1].timestamp)}</span>
+      </div>`;
+  }
+
+  let eloPointsCache = null;
+  async function loadEloChart(force=false) {
+    {% if current_user.is_authenticated %}
+    if (force || !eloPointsCache) {
+      eloPointsCache = await api('/api/me/rating-history?days=90');
+    }
+    drawLineChart(document.getElementById('elo-chart'), eloPointsCache);
+    {% endif %}
+  }
+
+  function renderPing(ms, ok=true) {
+    const text = document.getElementById('ping-text');
+    const bars = document.getElementById('ping-bars');
+    if (!ok || ms == null) {
+      text.textContent = 'offline';
+      bars.className = 'ping-bars down';
+      return;
+    }
+    text.textContent = `${ms} ms`;
+    if (ms < 120) bars.className = 'ping-bars good';
+    else if (ms < 280) bars.className = 'ping-bars medium';
+    else bars.className = 'ping-bars bad';
+  }
+
+  async function updatePingAndStats() {
+    try {
+      const start = performance.now();
+      const r = await fetch('/api/ping', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) throw new Error();
+      const ms = Math.round(performance.now() - start);
+      renderPing(ms, true);
+    } catch (e) {
+      renderPing(null, false);
+    }
+
+    try {
+      const statsRes = await fetch('/api/stats', { credentials: 'same-origin', cache: 'no-store' });
+      if (!statsRes.ok) throw new Error();
+      const stats = await statsRes.json();
+      const totalGames = stats.total_games_played ?? stats.total_games;
+      document.getElementById('stat-games').textContent = (totalGames ?? 0).toLocaleString();
+      document.getElementById('stat-online').textContent = stats.players_online ?? '—';
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  loadTournaments();
+  loadPlayers();
+  loadBots();
+  checkActiveGame();
+  loadEloChart(true);
+  updatePingAndStats();
+
+  setInterval(loadTournaments, 10000);
+  setInterval(checkActiveGame, 5000);
+  setInterval(updatePingAndStats, 5000);
+  window.addEventListener('resize', () => loadEloChart(false));
+</script>
+</body>
+</html>

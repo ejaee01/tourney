@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Panel – Arena</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f5f3ef; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; }
+    header { background: #fff; padding: 10px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    header h1 { font-size: 1.3rem; color: #c62828; }
+    a { color: #629924; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 20px; margin-bottom: 18px; }
+    .card h2 { color: #333; font-size: 1rem; margin-bottom: 14px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 7px 10px; color: #777; font-size: 0.78rem; text-transform: uppercase; border-bottom: 1px solid #eee; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 0.88rem; vertical-align: middle; }
+    tr:hover td { background: #f8f7f5; }
+    .btn { display: inline-block; padding: 5px 12px; border-radius: 3px; font-size: 0.82rem; cursor: pointer; border: none; font-weight: 600; margin-right: 4px; }
+    .btn-red { background: #c62828; color: #fff; }
+    .btn-red:hover { background: #b71c1c; }
+    .btn-green { background: #388e3c; color: #fff; }
+    .btn-green:hover { background: #2e7d32; }
+    .btn-blue { background: #4c82d5; color: #fff; }
+    .btn-blue:hover { background: #3d6fbd; }
+    .btn-gray { background: #eee; color: #333; border: 1px solid #ccc; }
+    .btn-gray:hover { background: #e0e0e0; }
+    .btn-danger { background: #b71c1c; color: #fff; }
+    .btn-danger:hover { background: #7f0000; }
+    select.title-sel { padding: 4px 6px; border: 1px solid #bbb; border-radius: 3px; font-size: 0.82rem; background: #fff; color: #333; }
+    input.text, input.num { padding: 6px 10px; border: 1px solid #bbb; border-radius: 3px; font-size: 0.9rem; background: #fff; color: #333; }
+    input.text:focus, input.num:focus { outline: none; border-color: #c62828; box-shadow: 0 0 0 2px rgba(198,40,40,.12); }
+    .badge-banned { background: #fce4ec; color: #c62828; border: 1px solid #ffcdd2; display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.74rem; font-weight: 600; }
+    .badge-ok { background: #e8f5e9; color: #388e3c; border: 1px solid #c8e6c9; display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.74rem; font-weight: 600; }
+    .title-badge { font-weight: bold; font-size: 0.8rem; margin-right: 3px; }
+    .alert-box { background: #fce4ec; border: 1px solid #ffcdd2; color: #c62828; padding: 14px 18px; border-radius: 4px; margin-bottom: 18px; }
+    .success-box { background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; padding: 14px 18px; border-radius: 4px; margin-bottom: 18px; display: none; }
+    .reset-section { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    #msg { font-size: 0.88rem; color: #388e3c; }
+    #msg.err { color: #c62828; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/">← Home</a>
+  <h1>⚙ Admin Panel</h1>
+  <span style="color:#777;font-size:0.9rem;margin-left:auto;">Logged in as <strong>{{ current_user.username }}</strong></span>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h2>Danger Zone</h2>
+    <div class="reset-section">
+      <div>
+        <strong style="color:#c62828;">Reset All Ratings</strong>
+        <p style="font-size:0.82rem;color:#777;margin-top:4px;">Resets every player to rating 500, RD 250, and clears rating history.</p>
+      </div>
+      <button class="btn btn-danger" onclick="resetRatings()">Reset All Ratings</button>
+      <span id="reset-msg" style="font-size:0.85rem;"></span>
+    </div>
+	  </div>
+
+	  <div class="card">
+	    <h2>Bots</h2>
+	    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+	      <div>
+	        <div style="font-size:0.82rem;color:#555;font-weight:600;margin-bottom:4px;">Bot username</div>
+	        <input id="bot-name" class="text" placeholder="ArenaBot" />
+	      </div>
+	      <div>
+	        <div style="font-size:0.82rem;color:#555;font-weight:600;margin-bottom:4px;">Starting rating</div>
+	        <input id="bot-rating" class="num" type="number" value="500" min="100" max="3000" />
+	      </div>
+	      <div>
+	        <div style="font-size:0.82rem;color:#555;font-weight:600;margin-bottom:4px;">Engine</div>
+	        <select id="bot-engine" class="title-sel">
+	          {% for e in bot_engines %}
+	          <option value="{{ e.key }}">{{ e.name }}</option>
+	          {% endfor %}
+	        </select>
+	      </div>
+	      <button class="btn btn-blue" onclick="createBot()">Create Bot</button>
+	      <span id="bot-msg" style="font-size:0.85rem;"></span>
+	    </div>
+	    <p style="font-size:0.82rem;color:#777;margin-top:10px;">Bots use title <strong>BOT</strong> and can play in Quick Play.</p>
+	  </div>
+
+	  <div class="card">
+	    <h2>Players (<span id="player-total">{{ players | length }}</span>)</h2>
+	    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+	      <input id="player-search" class="text" style="min-width:260px;" placeholder="Search by id / username / title / email…" oninput="filterPlayers()" />
+	      <span style="color:#777;font-size:0.85rem;">Showing <span id="player-shown">{{ players | length }}</span></span>
+	    </div>
+	    <table>
+	      <thead>
+        <tr>
+          <th>#</th>
+          <th>Username</th>
+          <th>Title</th>
+          <th>Rating</th>
+          <th>Games</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+	      </thead>
+	      <tbody id="players-body">
+	        {% for p in players %}
+	        <tr id="row-{{ p.id }}" data-search="{{ p.id }} {{ p.username }} {{ p.email or '' }} {{ p.title or '' }} {{ p.rating|int }}">
+	          <td style="color:#777;">{{ p.id }}</td>
+	          <td>
+	            {% if p.title %}
+	              <span class="title-badge" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(p.title,'#333') }}">{{ p.title }}</span>
+	            {% endif %}
+	            <a href="/profile/{{ p.id }}">{{ p.username }}</a>
+	            {% if p.is_admin %}<span style="color:#c62828;font-size:0.75rem;margin-left:4px;">[admin]</span>{% endif %}
+	          </td>
+          <td>
+            <select class="title-sel" id="title-{{ p.id }}">
+              <option value="">— none —</option>
+              {% for t in titles %}
+              <option value="{{ t }}" {% if p.title == t %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-blue" style="margin-top:4px;" onclick="setTitle({{ p.id }})">Set</button>
+            {% if p.title == 'BOT' %}
+            <div style="margin-top:8px;">
+              <select class="title-sel" id="bot-engine-{{ p.id }}">
+                {% for e in bot_engines %}
+                <option value="{{ e.key }}" {% if (bot_configs.get(p.id) or 'random_capture') == e.key %}selected{% endif %}>{{ e.name }}</option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-blue" style="margin-top:4px;" onclick="setBotEngine({{ p.id }})">Set Engine</button>
+            </div>
+            {% endif %}
+          </td>
+          <td>{{ p.rating | int }}</td>
+          <td>{{ p.games_played }}</td>
+          <td>
+            {% if p.banned %}
+              <span class="badge-banned">Banned</span>
+            {% else %}
+              <span class="badge-ok">Active</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if not p.is_admin %}
+              {% if p.banned %}
+                <button class="btn btn-green" onclick="unban({{ p.id }})">Unban</button>
+              {% else %}
+                <button class="btn btn-red" onclick="ban({{ p.id }})">Ban</button>
+              {% endif %}
+              <button class="btn btn-danger" onclick="deletePlayer({{ p.id }}, '{{ p.username }}')">Delete</button>
+            {% else %}
+              <span style="color:#aaa;font-size:0.8rem;">Protected</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  const TITLE_COLORS = {GM:'#f01010',IM:'#e07000',FM:'#c0a000',CM:'#8888aa',NM:'#999',WGM:'#e01080',WIM:'#e07000',WFM:'#c0a000',WCM:'#8888aa',BOT:'#4e94d4'};
+
+  async function api(url, body=null) {
+    const opts = { method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'same-origin' };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    return r.json();
+  }
+
+  async function ban(id) {
+    const res = await api(`/api/admin/ban/${id}`);
+    if (res.ok) {
+      const row = document.getElementById(`row-${id}`);
+      const td = row.querySelector('td:nth-child(6)');
+      td.innerHTML = '<span class="badge-banned">Banned</span>';
+      const actionTd = row.querySelector('td:nth-child(7)');
+      const banBtn = actionTd.querySelector('.btn-red');
+      if (banBtn) {
+        banBtn.className = 'btn btn-green';
+        banBtn.textContent = 'Unban';
+        banBtn.setAttribute('onclick', `unban(${id})`);
+      }
+    }
+  }
+
+  async function unban(id) {
+    const res = await api(`/api/admin/unban/${id}`);
+    if (res.ok) {
+      const row = document.getElementById(`row-${id}`);
+      const td = row.querySelector('td:nth-child(6)');
+      td.innerHTML = '<span class="badge-ok">Active</span>';
+      const actionTd = row.querySelector('td:nth-child(7)');
+      const unbanBtn = actionTd.querySelector('.btn-green');
+      if (unbanBtn) {
+        unbanBtn.className = 'btn btn-red';
+        unbanBtn.textContent = 'Ban';
+        unbanBtn.setAttribute('onclick', `ban(${id})`);
+      }
+    }
+  }
+
+  async function deletePlayer(id, username) {
+    if (!confirm(`Permanently delete account "${username}"? This cannot be undone.`)) return;
+    const res = await api(`/api/admin/delete/${id}`);
+    if (res.ok) {
+      const row = document.getElementById(`row-${id}`);
+      row.remove();
+    } else {
+      alert(res.error || 'Delete failed');
+    }
+  }
+
+  async function setTitle(id) {
+    const sel = document.getElementById(`title-${id}`);
+    const title = sel.value;
+    const res = await api(`/api/admin/set-title/${id}`, { title });
+    if (res.ok) {
+      const row = document.getElementById(`row-${id}`);
+      const nameTd = row.querySelector('td:nth-child(2)');
+      const oldTag = nameTd.querySelector('.title-badge');
+      if (oldTag) oldTag.remove();
+      if (res.title) {
+        const tag = document.createElement('span');
+        tag.className = 'title-badge';
+        tag.style.color = TITLE_COLORS[res.title] || '#333';
+        tag.textContent = res.title;
+        nameTd.insertBefore(tag, nameTd.firstChild);
+      }
+    }
+  }
+
+	  async function resetRatings() {
+	    if (!confirm('Reset ALL player ratings to 500/250 and clear rating history? This cannot be undone.')) return;
+	    const el = document.getElementById('reset-msg');
+	    const res = await api('/api/admin/reset-ratings');
+    if (res.ok) {
+      el.style.color = '#388e3c';
+      el.textContent = res.message;
+    } else {
+      el.style.color = '#c62828';
+      el.textContent = res.error || 'Error';
+	    }
+	  }
+
+	  function filterPlayers() {
+	    const q = (document.getElementById('player-search').value || '').toLowerCase().trim();
+	    const rows = document.querySelectorAll('#players-body tr');
+	    let shown = 0;
+	    rows.forEach(row => {
+	      const hay = (row.dataset.search || '').toLowerCase();
+	      const ok = !q || hay.includes(q);
+	      row.style.display = ok ? '' : 'none';
+	      if (ok) shown += 1;
+	    });
+	    const shownEl = document.getElementById('player-shown');
+	    if (shownEl) shownEl.textContent = shown;
+	  }
+
+	  async function createBot() {
+	    const msg = document.getElementById('bot-msg');
+	    msg.style.color = '#777';
+	    msg.textContent = 'Creating…';
+	    const username = (document.getElementById('bot-name').value || '').trim();
+	    const rating = +document.getElementById('bot-rating').value || 500;
+	    const bot_key = (document.getElementById('bot-engine').value || 'random_capture').trim();
+	    const res = await api('/api/admin/create-bot', { username, rating, bot_key });
+	    if (res.ok) {
+	      msg.style.color = '#388e3c';
+	      msg.textContent = `Created ${res.bot.username} (#${res.bot.id})`;
+	      setTimeout(()=>location.reload(), 500);
+	    } else {
+	      msg.style.color = '#c62828';
+	      msg.textContent = res.error || 'Error';
+	    }
+	  }
+
+	  async function setBotEngine(id) {
+	    const sel = document.getElementById(`bot-engine-${id}`);
+	    const bot_key = (sel.value || '').trim();
+	    const res = await api(`/api/admin/set-bot-engine/${id}`, { bot_key });
+	    if (!res.ok) {
+	      alert(res.error || 'Error');
+	    }
+	  }
+
+	  filterPlayers();
+	  setInterval(() => {
+	    fetch('/api/presence', { credentials: 'same-origin', cache: 'no-store' });
+	  }, 15000);
+	</script>
+</body>
+</html>

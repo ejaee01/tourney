@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register – Arena</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f5f3ef; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .box { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 40px 36px; width: 360px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    h1 { color: #333; font-size: 1.5rem; margin-bottom: 6px; }
+    p { color: #777; font-size: 0.88rem; margin-bottom: 24px; }
+    label { display: block; font-size: 0.82rem; color: #555; margin-bottom: 5px; font-weight: 600; }
+    input { width: 100%; padding: 9px 12px; background: #fff; border: 1px solid #bbb; border-radius: 3px; color: #333; font-size: 0.95rem; margin-bottom: 14px; }
+    input:focus { outline: none; border-color: #759900; box-shadow: 0 0 0 2px rgba(117,153,0,.15); }
+    button { width: 100%; background: #759900; color: #fff; border: none; padding: 11px; border-radius: 3px; font-size: 1rem; cursor: pointer; font-weight: 600; }
+    button:hover { background: #618200; }
+    .flash { background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 10px 14px; border-radius: 3px; font-size: 0.85rem; margin-bottom: 16px; }
+    .footer { margin-top: 20px; text-align: center; font-size: 0.85rem; color: #777; }
+    a { color: #629924; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="box">
+  <h1>♟ Create Account</h1>
+  <p>Join the Arena and start playing.</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST">
+    <label>Username</label>
+    <input name="username" placeholder="Choose a username" autocomplete="off" required />
+    <label>Email <span style="color:#999;font-size:0.78rem;">(optional)</span></label>
+    <input name="email" type="email" placeholder="your@email.com" />
+    <label>Password</label>
+    <input name="password" type="password" placeholder="At least 6 characters" required />
+    <button type="submit">Register</button>
+  </form>
+
+  <div class="footer">Already have an account? <a href="/login">Log in</a></div>
+</div>
+</body>
+</html>

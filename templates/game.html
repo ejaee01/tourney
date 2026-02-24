@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game – Arena</title>
+  <link rel="stylesheet"
+    href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f5f3ef; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; }
+    header { background: #fff; padding: 10px 24px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    header h1 { color: #333; font-size: 1.2rem; }
+    a { color: #629924; text-decoration: none; font-size: 0.9rem; }
+    a:hover { text-decoration: underline; }
+    .layout { display: flex; gap: 24px; padding: 20px; max-width: 900px; margin: 0 auto; flex-wrap: wrap; }
+    .board-col { flex: 0 0 auto; }
+    .side-col { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 14px; }
+    .player-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 4px; margin-bottom: 6px; background: #f5f5f5; border: 1px solid #e0e0e0; }
+    .player-bar.active { background: #e8f5e9; border-color: #c8e6c9; }
+    .player-name { font-weight: bold; font-size: 1rem; color: #333; }
+    .clock { font-size: 1.5rem; font-weight: bold; font-variant-numeric: tabular-nums; color: #333; }
+    .clock.low { color: #c62828; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    button { background: #759900; color: #fff; border: none; padding: 9px 16px; border-radius: 3px; cursor: pointer; font-size: 0.9rem; width: 100%; margin-bottom: 8px; font-weight: 600; }
+    button:hover { background: #618200; }
+    button.secondary { background: #eee; color: #333; border: 1px solid #ccc; }
+    button.secondary:hover { background: #e0e0e0; }
+    button:disabled { background: #e0e0e0; color: #aaa; cursor: default; }
+    #status { font-size: 1rem; text-align: center; padding: 10px; border-radius: 4px; background: #f5f5f5; border: 1px solid #ddd; color: #333; }
+    #status.won { background: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }
+    #status.lost { background: #fce4ec; color: #c62828; border-color: #ffcdd2; }
+    #status.draw { background: #f5f5f5; color: #777; border-color: #e0e0e0; }
+    #moves { font-size: 0.82rem; color: #555; max-height: 120px; overflow-y: auto; word-break: break-all; line-height: 1.6; font-family: monospace; }
+    .berserk-btn { background: #6a1b9a; }
+    .berserk-btn:hover { background: #4a0e72; }
+    #return-btn { display: none; background: #629924; }
+    #return-btn:hover { background: #518000; }
+    #ping-bar {
+      position: fixed; left: 14px; bottom: 14px;
+      background: #fff; border: 1px solid #ccc;
+      border-radius: 4px; padding: 8px 12px;
+      font-size: 0.82rem; display: flex; align-items: center; gap: 8px;
+      z-index: 20; box-shadow: 0 2px 6px rgba(0,0,0,.1); color: #333;
+    }
+    .ping-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+    .ping-bars span { width: 4px; background: #ccc; border-radius: 2px; }
+    .ping-bars span:nth-child(1) { height: 4px; }
+    .ping-bars span:nth-child(2) { height: 6px; }
+    .ping-bars span:nth-child(3) { height: 9px; }
+    .ping-bars span:nth-child(4) { height: 12px; }
+    .ping-bars.good span { background: #759900; }
+    .ping-bars.medium span:nth-child(-n+3) { background: #e07000; }
+    .ping-bars.medium span:nth-child(4) { background: #ccc; }
+    .ping-bars.bad span:nth-child(-n+2) { background: #c62828; }
+    .ping-bars.bad span:nth-child(n+3) { background: #ccc; }
+    .ping-bars.down span { background: #ccc; }
+
+    /* Lichess CBurnett board colors override */
+    .white-1e1d7 { background-color: #f0d9b5 !important; }
+    .black-3c85d { background-color: #b58863 !important; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/">← Home</a>
+  <h1>♟ Live Game</h1>
+  <span id="tc-label" style="color:#777;margin-left:auto;font-size:0.85rem;"></span>
+</header>
+
+<div class="layout">
+  <div class="board-col">
+    <div id="opponent-bar" class="player-bar">
+      <span id="opponent-name" class="player-name">—</span>
+      <span id="opponent-rating" class="player-rating" style="margin-left:8px;color:#555;">—</span>
+      <span id="opponent-clock" class="clock">—:——</span>
+    </div>
+    <div id="board" style="width:480px"></div>
+    <div id="my-bar" class="player-bar">
+      <span id="my-name" class="player-name">{{ my_username }}</span>
+      <span id="my-rating" class="player-rating" style="margin-left:8px;color:#555;">—</span>
+      <span id="my-clock" class="clock">—:——</span>
+    </div>
+  </div>
+
+  <div class="side-col">
+    <div id="status">Waiting for game data…</div>
+
+	    <div class="card">
+	      <button id="resign-btn" onclick="resign()">Resign</button>
+	      <button class="berserk-btn" id="berserk-btn" onclick="berserk()">⚡ Berserk</button>
+	      <button class="secondary" id="claim-btn" onclick="claimTime()">Claim on time</button>
+	      <button class="secondary" id="return-btn" onclick="window.history.back()">← Back</button>
+	    </div>
+
+    <div class="card">
+      <div style="font-size:0.8rem;color:#777;margin-bottom:6px;">Move list</div>
+      <div id="moves"></div>
+    </div>
+  </div>
+</div>
+
+<div id="ping-bar">
+  <div id="ping-bars" class="ping-bars down"><span></span><span></span><span></span><span></span></div>
+  <div id="ping-text">-- ms</div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+	<script>
+	  const GAME_ID = {{ game_id }};
+	  const MY_ID   = {{ my_id }};
+	  const SPECTATOR = {{ 'true' if spectator else 'false' }};
+
+  let game = new Chess();
+  let board = null;
+  let myColor = null;
+  let gameOver = false;
+  let whiteClockMs = 0;
+  let blackClockMs = 0;
+  let clockRunningFor = 'white';
+  let lastSync = Date.now();
+  let pollInterval = null;
+  let clockInterval = null;
+  let pingInterval = null;
+
+  async function api(url, method='GET', body=null) {
+    const opts = { method, headers: {'Content-Type':'application/json'}, credentials:'same-origin' };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    return r.json();
+  }
+
+  function formatClock(ms) {
+    if (ms <= 0) return '0:00';
+    const total = Math.ceil(ms / 1000);
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${s.toString().padStart(2,'0')}`;
+  }
+
+  function renderClocks() {
+    const now = Date.now();
+    const elapsed = now - lastSync;
+    let wc = whiteClockMs;
+    let bc = blackClockMs;
+    if (!gameOver) {
+      if (clockRunningFor === 'white') wc = Math.max(0, wc - elapsed);
+      else bc = Math.max(0, bc - elapsed);
+    }
+
+    const myIsWhite = myColor === 'white';
+    const myClock   = myIsWhite ? wc : bc;
+    const oppClock  = myIsWhite ? bc : wc;
+
+    document.getElementById('my-clock').textContent = formatClock(myClock);
+    document.getElementById('opponent-clock').textContent = formatClock(oppClock);
+
+    const myEl  = document.getElementById('my-clock');
+    const oppEl = document.getElementById('opponent-clock');
+    myEl.className  = 'clock' + (myClock  < 10000 ? ' low' : '');
+    oppEl.className = 'clock' + (oppClock < 10000 ? ' low' : '');
+  }
+
+	  function applyState(data) {
+    whiteClockMs   = data.white_clock_ms;
+    blackClockMs   = data.black_clock_ms;
+    clockRunningFor = data.clock_running_for;
+    lastSync       = Date.now();
+
+    game.load(data.fen);
+    if (board) board.position(data.fen);
+
+    const moveList = (data.pgn_moves || '').split(' ').filter(Boolean);
+    document.getElementById('moves').textContent = moveList.join(' ');
+
+    const myIsWhite = myColor === 'white';
+    document.getElementById('my-bar').className    = 'player-bar' + ((myIsWhite && data.clock_running_for==='white') || (!myIsWhite && data.clock_running_for==='black') ? ' active' : '');
+    document.getElementById('opponent-bar').className = 'player-bar' + ((myIsWhite && data.clock_running_for==='black') || (!myIsWhite && data.clock_running_for==='white') ? ' active' : '');
+
+	    const statusEl = document.getElementById('status');
+	    if (data.result !== 'ongoing') {
+	      gameOver = true;
+	      stopIntervals();
+	      board.draggable = false;
+	      document.getElementById('resign-btn').disabled = true;
+	      document.getElementById('berserk-btn').disabled = true;
+	      document.getElementById('claim-btn').disabled = true;
+	      document.getElementById('return-btn').style.display = 'block';
+
+	      if (data.result === 'draw') {
+	        statusEl.textContent = 'Draw!'; statusEl.className = 'draw';
+	      } else {
+	        if (SPECTATOR) {
+	          statusEl.textContent = `Game over: ${data.result === 'white' ? 'White' : 'Black'} wins.`;
+	          statusEl.className = '';
+	        } else {
+	          const iWon = (data.result === 'white' && myColor === 'white') ||
+	                       (data.result === 'black' && myColor === 'black');
+	          statusEl.textContent = iWon ? '🏆 You won!' : 'You lost.';
+	          statusEl.className   = iWon ? 'won' : 'lost';
+	        }
+	      }
+	    } else {
+	      if (SPECTATOR) {
+	        statusEl.textContent = game.turn() === 'w' ? 'White to move' : 'Black to move';
+	      } else {
+	        const myTurn = (game.turn() === 'w' && myColor === 'white') ||
+	                       (game.turn() === 'b' && myColor === 'black');
+	        statusEl.textContent = myTurn ? 'Your turn' : "Opponent's turn";
+	      }
+	      statusEl.className   = '';
+	    }
+
+    renderClocks();
+  }
+
+  async function poll() {
+    if (gameOver) return;
+    const data = await api(`/api/games/${GAME_ID}`);
+    applyState(data);
+  }
+
+  function stopIntervals() {
+    clearInterval(pollInterval);
+    clearInterval(clockInterval);
+    clearInterval(pingInterval);
+  }
+
+  function renderPing(ms, ok=true) {
+    const text = document.getElementById('ping-text');
+    const bars = document.getElementById('ping-bars');
+    if (!ok || ms == null) {
+      text.textContent = 'offline';
+      bars.className = 'ping-bars down';
+      return;
+    }
+    text.textContent = `${ms} ms`;
+    if (ms < 120) bars.className = 'ping-bars good';
+    else if (ms < 280) bars.className = 'ping-bars medium';
+    else bars.className = 'ping-bars bad';
+  }
+
+  async function updatePing() {
+    const start = performance.now();
+    try {
+      const r = await fetch('/api/ping', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) throw new Error();
+      const ms = Math.round(performance.now() - start);
+      renderPing(ms, true);
+    } catch (e) {
+      renderPing(null, false);
+    }
+  }
+
+	  function onDragStart(source, piece) {
+	    if (SPECTATOR) return false;
+	    if (gameOver) return false;
+	    if ((myColor === 'white' && piece.startsWith('b')) ||
+	        (myColor === 'black' && piece.startsWith('w'))) return false;
+	    if ((game.turn() === 'w') !== (myColor === 'white')) return false;
+	    return true;
+	  }
+
+	  async function onDrop(source, target) {
+	    if (SPECTATOR) return 'snapback';
+	    const promotion = 'q';
+	    const fullUci = source + target + (isPromotion(source, target) ? promotion : '');
+
+    const data = await api(`/api/games/${GAME_ID}/move`, 'POST', { move: fullUci });
+    if (data.error) {
+      return 'snapback';
+    }
+    applyState(data);
+  }
+
+  function isPromotion(from, to) {
+    const piece = game.get(from);
+    if (!piece || piece.type !== 'p') return false;
+    return (piece.color === 'w' && to[1] === '8') ||
+           (piece.color === 'b' && to[1] === '1');
+  }
+
+  function onSnapEnd() {
+    board.position(game.fen());
+  }
+
+  async function resign() {
+    if (!confirm('Resign this game?')) return;
+    await api(`/api/games/${GAME_ID}/resign`, 'POST');
+    await poll();
+  }
+
+  async function berserk() {
+    await api(`/api/games/${GAME_ID}/berserk`, 'POST');
+    await poll();
+  }
+
+  async function claimTime() {
+    const data = await api(`/api/games/${GAME_ID}/claim-time`, 'POST');
+    if (data.ok) await poll();
+    else alert(data.message);
+  }
+
+	  async function init() {
+	    const data = await api(`/api/games/${GAME_ID}`);
+	    myColor = (!SPECTATOR && data.white_id === MY_ID) ? 'white' : 'black';
+	    if (SPECTATOR) {
+	      myColor = 'white';
+	      document.getElementById('resign-btn').style.display = 'none';
+	      document.getElementById('berserk-btn').style.display = 'none';
+	      document.getElementById('claim-btn').style.display = 'none';
+	    }
+
+	    document.getElementById('my-name').textContent       = myColor === 'white' ? data.white : data.black;
+	    document.getElementById('opponent-name').textContent = myColor === 'white' ? data.black : data.white;
+    document.getElementById('my-rating').textContent      = myColor === 'white' ? `${data.white_rating} (${data.white_rank})` : `${data.black_rating} (${data.black_rank})`;
+    document.getElementById('opponent-rating').textContent = myColor === 'white' ? `${data.black_rating} (${data.black_rank})` : `${data.white_rating} (${data.white_rank})`;
+	    board = Chessboard('board', {
+	      draggable: !SPECTATOR,
+	      position: data.fen,
+	      orientation: myColor,
+	      onDragStart,
+	      onDrop,
+      onSnapEnd,
+      pieceTheme: function(piece) {
+        return `https://lichess1.org/assets/piece/cburnett/${piece}.svg`;
+      },
+    });
+
+    applyState(data);
+
+    if (data.result === 'ongoing') {
+      // shorten poll interval so opponent moves show up more responsively,
+      // the previous 1.5‑second delay made the UI feel sluggish.
+      pollInterval  = setInterval(poll, 500);
+      clockInterval = setInterval(renderClocks, 100);
+    }
+    updatePing();
+    pingInterval = setInterval(updatePing, 5000);
+  }
+
+  init();
+</script>
+</body>
+</html>

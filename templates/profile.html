@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	  <title>{{ player.username }} – Profile</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f5f3ef; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; }
+    header { background: #fff; padding: 10px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    header h1 { font-size: 1.3rem; color: #333; }
+    a { color: #629924; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 18px; margin-bottom: 16px; }
+    .card h2 { color: #333; font-size: 1rem; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+    .metric { display: flex; justify-content: space-between; border-bottom: 1px solid #f0f0f0; padding: 8px 0; font-size: 0.92rem; }
+    .metric:last-child { border-bottom: 0; }
+    .value { font-weight: bold; color: #333; }
+    .value.blue { color: #629924; font-size: 1.2rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 7px 10px; color: #777; border-bottom: 1px solid #eee; font-size: 0.76rem; text-transform: uppercase; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 0.86rem; }
+    tr:hover td { background: #f8f7f5; }
+    .chart-wrap { height: 240px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fafafa; padding: 10px; }
+    .empty { color: #999; font-size: 0.9rem; padding-top: 10px; }
+    .win { color: #388e3c; font-weight: bold; }
+    .loss { color: #c62828; }
+    .draw { color: #777; }
+    .ongoing { color: #e07000; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.74rem; font-weight: 600; }
+    .badge.waiting  { background: #e8f5e9; color: #388e3c; border: 1px solid #c8e6c9; }
+    .badge.active   { background: #fce4ec; color: #c62828; border: 1px solid #ffcdd2; }
+    .badge.finished { background: #f5f5f5; color: #999; border: 1px solid #e0e0e0; }
+    .title-tag { font-weight: bold; margin-right: 4px; }
+  </style>
+</head>
+<body>
+	<header>
+	  <a href="/">← Home</a>
+	  <h1>
+	    {% if player.title %}
+	      <span class="title-tag" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(player.title,'#333') }}">{{ player.title }}</span>
+	    {% endif %}
+	    {{ player.username }}'s Profile
+	  </h1>
+	</header>
+
+<div class="container">
+  <div class="grid">
+    <div class="card">
+      <h2>Rating &amp; Stats</h2>
+	      <div class="metric">
+	        <span>Elo Rating</span>
+	        <span class="value" style="font-size:1.2rem;">{{ player.rating | int }}</span>
+	      </div>
+	      <div class="metric">
+	        <span>Rating Deviation (RD)</span>
+	        <span class="value">{{ '%.1f' | format(player.rd) }}</span>
+	      </div>
+	      <div class="metric">
+	        <span>Games Played</span>
+	        <span class="value">{{ player.games_played }}</span>
+	      </div>
+      <div class="metric">
+        <span>Performance (last 3 tournaments)</span>
+        <span class="value blue">{{ performance_last_3 if performance_last_3 is not none else '—' }}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Elo Graph <span style="color:#aaa;font-size:0.82rem;font-weight:normal;">last 90 days</span></h2>
+      <div id="rating-chart" class="chart-wrap"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Previous Tournaments</h2>
+    {% if tournaments %}
+    <table>
+      <thead>
+        <tr>
+          <th>Tournament</th>
+          <th>Status</th>
+          <th>Score</th>
+          <th>W / D / L</th>
+          <th>Games</th>
+          <th>Performance</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tp, t in tournaments %}
+        <tr style="cursor:pointer;" onclick="window.location='/tournament/{{ t.id }}'">
+          <td><a href="/tournament/{{ t.id }}">{{ t.name }}</a></td>
+          <td><span class="badge {{ t.status }}">{{ t.status }}</span></td>
+          <td style="font-weight:bold;">{{ tp.score }}</td>
+          <td>
+            <span class="win">{{ tp.wins }}</span> /
+            <span class="draw">{{ tp.draws }}</span> /
+            <span class="loss">{{ tp.losses }}</span>
+          </td>
+          <td>{{ tp.games_played }}</td>
+          <td style="color:#4c82d5;">{{ tp.performance_rating | int if tp.performance_rating else '—' }}</td>
+          <td><a href="/tournament/{{ t.id }}" onclick="event.stopPropagation()">View →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No tournaments played yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>All Games</h2>
+    {% if recent_games %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Color</th>
+          <th>Opponent</th>
+          <th>Result</th>
+          <th>Tournament</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+	        {% for g, as_white, opp, opp_rating, opp_rank in recent_games %}
+	        {% set opp_name = opp.username %}
+        {% if g.result == 'draw' %}
+          {% set me_result = 'Draw' %}
+          {% set res_class = 'draw' %}
+        {% elif (g.result == 'white' and as_white) or (g.result == 'black' and not as_white) %}
+          {% set me_result = 'Win' %}
+          {% set res_class = 'win' %}
+        {% elif g.result == 'ongoing' %}
+          {% set me_result = 'Ongoing' %}
+          {% set res_class = 'ongoing' %}
+        {% else %}
+          {% set me_result = 'Loss' %}
+          {% set res_class = 'loss' %}
+        {% endif %}
+        <tr style="cursor:pointer;" onclick="window.location='/game/{{ g.id }}'">
+	          <td style="color:#777;">{{ g.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+	          <td>{{ 'White' if as_white else 'Black' }}</td>
+	          <td>
+            <a href="/profile/{{ opp.id }}" onclick="event.stopPropagation()">
+              {{ opp_name }} ({{ opp_rating }}{% if opp_rank %} #{{ opp_rank }}{% endif %})
+            </a>
+          </td>
+	          <td class="{{ res_class }}">{{ me_result }}</td>
+          <td><a href="/tournament/{{ g.tournament_id }}" onclick="event.stopPropagation()">#{{ g.tournament_id }}</a></td>
+          <td><a href="/game/{{ g.id }}" onclick="event.stopPropagation()">Open →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No games played yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  const PLAYER_ID = {{ player.id }};
+  function fmtDate(ts) {
+    if (!ts || typeof ts !== 'string') return '—';
+    const iso = ts.endsWith('Z') || /[+-]\\d{2}:\\d{2}$/.test(ts) ? ts : (ts + 'Z');
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function drawLineChart(container, points) {
+    if (!container) return;
+    if (!points || !points.length) {
+      container.innerHTML = '<div class="empty">No rating history yet.</div>';
+      return;
+    }
+
+    const w = container.clientWidth - 20;
+    const h = container.clientHeight - 34;
+    const firstR = points[0].rating;
+    const maxDev = Math.max(...points.map(p => Math.abs(p.rating - firstR)));
+    const pad = Math.max(1, Math.ceil(maxDev * 1.1));
+    const minR = firstR - pad;
+    const maxR = firstR + pad;
+    const span = Math.max(1, maxR - minR);
+
+    const step = w / Math.max(1, points.length);
+    const pts = points.map((p, i) => {
+      const x = (i + 0.5) * step;
+      const y = h - ((p.rating - minR) / span) * h;
+      return { x, y, rating: p.rating };
+    });
+
+    const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const areaPath = [
+      `M ${pts[0].x.toFixed(1)},${h}`,
+      ...pts.map(p => `L ${p.x.toFixed(1)},${p.y.toFixed(1)}`),
+      `L ${pts[pts.length-1].x.toFixed(1)},${h}`,
+      'Z'
+    ].join(' ');
+
+    const last = pts[pts.length - 1];
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(frac => {
+      const val = Math.round(minR + frac * span);
+      const y = h - frac * h;
+      return `<line x1="0" y1="${y.toFixed(1)}" x2="${w}" y2="${y.toFixed(1)}" stroke="#e0e0e0" stroke-width="1"/>
+              <text x="2" y="${(y - 2).toFixed(1)}" fill="#aaa" font-size="9">${val}</text>`;
+    }).join('');
+
+    container.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h + 4}" width="100%" height="${h + 4}">
+        <defs>
+          <linearGradient id="profGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#759900" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#759900" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        ${gridLines}
+        <path d="${areaPath}" fill="url(#profGrad)" />
+        <polyline fill="none" stroke="#759900" stroke-width="2" stroke-linejoin="round" points="${polyline}" />
+        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="#759900" />
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:0.76rem;color:#aaa;margin-top:4px;">
+        <span>${fmtDate(points[0].timestamp)}</span>
+        <span style="color:#759900;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
+        <span>${fmtDate(points[points.length-1].timestamp)}</span>
+      </div>
+    `;
+  }
+
+  let ratingPointsCache = null;
+  async function loadChart(force=false) {
+    if (force || !ratingPointsCache) {
+      const res = await fetch(`/api/players/${PLAYER_ID}/rating-history?days=90`, { credentials: 'same-origin' });
+      ratingPointsCache = await res.json();
+    }
+    drawLineChart(document.getElementById('rating-chart'), ratingPointsCache);
+  }
+
+  loadChart(true);
+  window.addEventListener('resize', () => loadChart(false));
+
+  {% if current_user.is_authenticated %}
+  setInterval(() => {
+    fetch('/api/presence', { credentials: 'same-origin', cache: 'no-store' });
+  }, 15000);
+  {% endif %}
+</script>
+</body>
+</html>
