@@ -915,6 +915,14 @@ def admin_delete(player_id):
     PairingHistory.query.filter(
         db.or_(PairingHistory.player_a_id == player_id, PairingHistory.player_b_id == player_id)
     ).delete(synchronize_session=False)
+    # delete all games where player is white or black
+    Game.query.filter(
+        db.or_(Game.white_id == player_id, Game.black_id == player_id)
+    ).delete(synchronize_session=False)
+    # delete related records
+    Presence.query.filter_by(player_id=player_id).delete()
+    CasualQueue.query.filter_by(player_id=player_id).delete()
+    BotConfig.query.filter_by(player_id=player_id).delete()
     db.session.delete(p)
     db.session.commit()
     return jsonify({"ok": True})
