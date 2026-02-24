@@ -373,8 +373,29 @@ def list_bots():
         .limit(limit)
         .all()
     )
-    # use Player.to_dict to include rating, rank, etc.
-    return jsonify([b.to_dict() for b in bots])
+    if not bots:
+        return jsonify([])
+
+    engine_map = {e.get("key"): e for e in list_engines()}
+    bot_ids = [b.id for b in bots]
+    bot_cfg_map = {
+        c.player_id: c.bot_key
+        for c in BotConfig.query.filter(BotConfig.player_id.in_(bot_ids)).all()
+    }
+
+    out = []
+    for b in bots:
+        info = b.to_dict()
+        bot_key = bot_cfg_map.get(b.id, "random_capture")
+        engine = engine_map.get(bot_key, {})
+        info["bot_key"] = bot_key
+        info["bot_engine_name"] = engine.get("name") or bot_key
+        info["bot_description"] = (
+            engine.get("description")
+            or f"Engine {info['bot_engine_name']}."
+        )
+        out.append(info)
+    return jsonify(out)
 
 
 @app.route("/api/bot-engines")

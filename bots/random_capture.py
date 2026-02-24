@@ -18,6 +18,7 @@ register(
         key="random_capture",
         name="Random (captures first)",
         choose_move=choose_move,
+        description="Picks a random legal move, but prefers captures when available.",
     )
 )
 

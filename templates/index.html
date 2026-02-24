@@ -72,6 +72,60 @@
     .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #759900; display: inline-block; margin-right: 3px; }
     .admin-link { margin-left: 10px; background: #c62828; color: #fff; padding: 4px 10px; border-radius: 3px; font-size: 0.82rem; font-weight: bold; }
     .admin-link:hover { background: #b71c1c; text-decoration: none; }
+    .qp-tc-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .qp-choice-btn {
+      background: #f5f5f5;
+      color: #333;
+      border: 1px solid #cfcfcf;
+      padding: 7px 10px;
+      border-radius: 4px;
+      font-size: 0.84rem;
+      line-height: 1.2;
+    }
+    .qp-choice-btn:hover { background: #ececec; }
+    .qp-choice-btn.active {
+      background: #759900;
+      color: #fff;
+      border-color: #6a8900;
+    }
+    .qp-bot-list {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #fafafa;
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 6px;
+      margin-bottom: 8px;
+    }
+    .qp-bot-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: #fff;
+      color: #333;
+      border: 1px solid #e1e1e1;
+      padding: 8px 10px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      font-size: 0.85rem;
+    }
+    .qp-bot-item:hover { background: #f4f8e9; border-color: #c8d9a0; }
+    .qp-bot-item:last-child { margin-bottom: 0; }
+    .qp-bot-item .small { color: #666; font-size: 0.78rem; }
+    .qp-bot-item.active { background: #edf5d8; border-color: #98b24a; }
+    .qp-bot-empty { color: #999; font-size: 0.84rem; padding: 8px 4px; }
+    .qp-bot-details {
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      background: #fbfbfb;
+      padding: 10px 12px;
+      font-size: 0.83rem;
+      color: #555;
+      min-height: 64px;
+      margin-bottom: 8px;
+    }
+    .qp-bot-details .name { font-weight: 700; color: #333; margin-bottom: 4px; font-size: 0.88rem; }
+    .qp-bot-details .meta { color: #777; margin-bottom: 4px; font-size: 0.78rem; }
   </style>
 </head>
 <body>
@@ -152,21 +206,14 @@
     <div class="card">
       <h2>Quick Play</h2>
       <label>Time Control</label>
-      <select id="qp-tc">
-        <option value="1+0">1+0 Bullet</option>
-        <option value="2+1">2+1 Bullet</option>
-        <option value="3+0">3+0 Blitz</option>
-        <option value="3+2" selected>3+2 Blitz</option>
-        <option value="5+0">5+0 Blitz</option>
-        <option value="5+3">5+3 Blitz</option>
-        <option value="10+0">10+0 Rapid</option>
-      </select>
+      <div id="qp-tc-list" class="qp-tc-list"></div>
       <button onclick="quickJoin()">Find Human Match</button>
       <button class="secondary" onclick="quickLeave()">Cancel</button>
       <hr style="border:none;border-top:1px solid #eee;margin:12px 0;" />
       <label>Play vs Bot</label>
-      <select id="qp-bot"></select>
-      <button onclick="playBot()">Play Bot</button>
+      <div id="qp-bot-list" class="qp-bot-list"></div>
+      <div id="qp-bot-details" class="qp-bot-details">Select a bot to see details.</div>
+      <button id="qp-play-bot-btn" onclick="playBot()">Play Bot</button>
       <div id="qp-msg" class="msg"></div>
     </div>
     {% endif %}
@@ -210,6 +257,95 @@
 
 <script>
   const TITLE_COLORS = {GM:'#f01010',IM:'#e07000',FM:'#c0a000',CM:'#8888aa',NM:'#999',WGM:'#e01080',WIM:'#e07000',WFM:'#c0a000',WCM:'#8888aa',BOT:'#4e94d4'};
+  const QUICK_TIME_CONTROLS = [
+    { value: '1+0', label: '1+0 Bullet' },
+    { value: '2+1', label: '2+1 Bullet' },
+    { value: '3+0', label: '3+0 Blitz' },
+    { value: '3+2', label: '3+2 Blitz' },
+    { value: '5+0', label: '5+0 Blitz' },
+    { value: '5+3', label: '5+3 Blitz' },
+    { value: '10+0', label: '10+0 Rapid' },
+  ];
+  let selectedQuickTc = '3+2';
+  let quickBots = [];
+  let selectedBotId = null;
+
+  function escapeHtml(v) {
+    return String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function renderQuickTimeControlButtons() {
+    const listEl = document.getElementById('qp-tc-list');
+    if (!listEl) return;
+    listEl.innerHTML = QUICK_TIME_CONTROLS.map((tc) => {
+      const active = tc.value === selectedQuickTc ? ' active' : '';
+      return `<button class="qp-choice-btn${active}" data-qp-tc="${tc.value}">${escapeHtml(tc.label)}</button>`;
+    }).join('');
+  }
+
+  function setQuickTimeControl(tc) {
+    selectedQuickTc = tc;
+    renderQuickTimeControlButtons();
+  }
+
+  function renderBotDetails(bot) {
+    const detailsEl = document.getElementById('qp-bot-details');
+    if (!detailsEl) return;
+    if (!bot) {
+      detailsEl.innerHTML = 'Select a bot to see details.';
+      return;
+    }
+    const rank = bot.rank ? ` #${bot.rank}` : '';
+    const engine = bot.bot_engine_name || bot.bot_key || 'Unknown';
+    const desc = bot.bot_description || `Engine ${engine}.`;
+    detailsEl.innerHTML = `
+      <div class="name">${escapeHtml(bot.username)} (${bot.rating}${escapeHtml(rank)})</div>
+      <div class="meta">Engine: ${escapeHtml(engine)}</div>
+      <div>${escapeHtml(desc)}</div>
+    `;
+  }
+
+  function renderBotList() {
+    const listEl = document.getElementById('qp-bot-list');
+    const playBtn = document.getElementById('qp-play-bot-btn');
+    if (!listEl) return;
+
+    if (!quickBots.length) {
+      listEl.innerHTML = '<div class="qp-bot-empty">No bots yet (create in Admin).</div>';
+      selectedBotId = null;
+      if (playBtn) playBtn.disabled = true;
+      renderBotDetails(null);
+      return;
+    }
+
+    if (!selectedBotId || !quickBots.some((b) => b.id === selectedBotId)) {
+      selectedBotId = quickBots[0].id;
+    }
+    if (playBtn) playBtn.disabled = false;
+    listEl.innerHTML = quickBots.map((b) => {
+      const active = b.id === selectedBotId ? ' active' : '';
+      const rank = b.rank ? ` #${b.rank}` : '';
+      const engine = b.bot_engine_name || b.bot_key || 'bot';
+      return `
+        <button class="qp-bot-item${active}" data-bot-id="${b.id}">
+          <div>${escapeHtml(b.username)} (${b.rating}${escapeHtml(rank)})</div>
+          <div class="small">${escapeHtml(engine)}</div>
+        </button>`;
+    }).join('');
+
+    const selected = quickBots.find((b) => b.id === selectedBotId) || null;
+    renderBotDetails(selected);
+  }
+
+  function selectBot(botId) {
+    selectedBotId = botId;
+    renderBotList();
+  }
 
   async function api(url, method='GET', body=null) {
     const opts = { method, headers:{'Content-Type':'application/json'}, credentials:'same-origin' };
@@ -272,16 +408,8 @@
 
   async function loadBots() {
     {% if current_user.is_authenticated %}
-    const sel = document.getElementById('qp-bot');
-    if (!sel) return;
-    const list = await api('/api/bots?limit=50');
-    if (!list.length) {
-      sel.innerHTML = '<option value="">No bots yet (create in Admin)</option>';
-      sel.disabled = true;
-      return;
-    }
-    sel.disabled = false;
-    sel.innerHTML = list.map(b => `<option value="${b.id}">${b.username} (${b.rating}${b.rank?` #${b.rank}`:''})</option>`).join('');
+    quickBots = await api('/api/bots?limit=50');
+    renderBotList();
     {% endif %}
   }
 
@@ -289,7 +417,7 @@
     const msg = document.getElementById('qp-msg');
     msg.textContent = 'Finding match…';
     msg.className = 'msg';
-    const tc = document.getElementById('qp-tc').value;
+    const tc = selectedQuickTc || '3+2';
     const res = await api('/api/casual/join', 'POST', { time_control: tc });
     if (res.error) {
       msg.textContent = res.error;
@@ -317,14 +445,13 @@
     const msg = document.getElementById('qp-msg');
     msg.textContent = '';
     msg.className = 'msg';
-    const botSel = document.getElementById('qp-bot');
-    const botId = +(botSel && botSel.value);
+    const botId = Number(selectedBotId || 0);
     if (!botId) {
       msg.textContent = 'Select a bot first.';
       msg.className = 'msg err';
       return;
     }
-    const tc = document.getElementById('qp-tc').value;
+    const tc = selectedQuickTc || '3+2';
     const res = await api('/api/casual/play-bot', 'POST', { bot_id: botId, time_control: tc });
     if (res.error) {
       msg.textContent = res.error;
@@ -447,6 +574,21 @@
     }
   }
 
+  document.addEventListener('click', (e) => {
+    const tcBtn = e.target.closest('[data-qp-tc]');
+    if (tcBtn) {
+      setQuickTimeControl(tcBtn.getAttribute('data-qp-tc') || '3+2');
+      return;
+    }
+    const botBtn = e.target.closest('[data-bot-id]');
+    if (botBtn) {
+      const botId = Number(botBtn.getAttribute('data-bot-id') || '0');
+      if (botId > 0) selectBot(botId);
+    }
+  });
+
+  renderQuickTimeControlButtons();
+  renderBotList();
   loadTournaments();
   loadPlayers();
   loadBots();

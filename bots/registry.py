@@ -13,6 +13,7 @@ class BotEngine:
     key: str
     name: str
     choose_move: Callable[[chess.Board], chess.Move]
+    description: str = ""
 
 
 _ENGINES: Dict[str, BotEngine] = {}
@@ -49,5 +50,12 @@ def get_engine(key: str) -> Optional[BotEngine]:
 
 def list_engines() -> List[dict]:
     _ensure_loaded()
-    return [{"key": e.key, "name": e.name} for e in sorted(_ENGINES.values(), key=lambda x: x.key)]
+    return [
+        {
+            "key": e.key,
+            "name": e.name,
+            "description": e.description or "",
+        }
+        for e in sorted(_ENGINES.values(), key=lambda x: x.key)
+    ]
 

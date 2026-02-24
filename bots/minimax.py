@@ -240,5 +240,6 @@ register(
         key="minimax",
         name="Minimax (fast depth 1-2, α-β)",
         choose_move=choose_move,
+        description="Fast minimax with alpha-beta pruning and a short search budget.",
     )
 )
