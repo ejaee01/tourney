@@ -279,7 +279,18 @@
   function installRightClickNotes() {
     const wrap = document.getElementById('board-wrap');
     if (!wrap) return;
-    wrap.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    function isInsideWrap(evt) {
+      const t = evt.target;
+      return !!(t && (t === wrap || wrap.contains(t)));
+    }
+
+    // Disable native context menu on the board area (capture phase is more reliable).
+    document.addEventListener('contextmenu', (e) => {
+      if (isInsideWrap(e) || rightDragStart !== null) {
+        e.preventDefault();
+      }
+    }, true);
 
     wrap.addEventListener('mousedown', (e) => {
       if (e.button !== 2) return;
@@ -291,30 +302,52 @@
       e.preventDefault();
     });
 
-    wrap.addEventListener('mousemove', (e) => {
+    window.addEventListener('mousemove', (e) => {
       if (rightDragStart == null) return;
       const sq = squareFromMouseEvent(e);
-      if (!sq) return;
-      rightDragPreview = sq;
+      rightDragPreview = sq || rightDragStart;
       renderAnnotations();
       e.preventDefault();
     });
 
-    wrap.addEventListener('mouseup', (e) => {
-      if (e.button !== 2 || rightDragStart == null) return;
-      const sq = squareFromMouseEvent(e) || rightDragStart;
+    window.addEventListener('mouseup', (e) => {
+      if (rightDragStart == null) return;
+      const sq = squareFromMouseEvent(e);
+      if (!sq) {
+        rightDragStart = null;
+        rightDragPreview = null;
+        renderAnnotations();
+        return;
+      }
+
       if (sq === rightDragStart) {
-        if (noteDots.has(sq)) noteDots.delete(sq);
-        else noteDots.add(sq);
+        if (noteDots.has(sq)) {
+          noteDots.delete(sq);
+        } else {
+          noteDots.add(sq);
+        }
       } else {
         const key = `${rightDragStart}${sq}`;
-        if (noteArrows.has(key)) noteArrows.delete(key);
-        else noteArrows.add(key);
+        const reverse = `${sq}${rightDragStart}`;
+        if (noteArrows.has(key)) {
+          noteArrows.delete(key);
+        } else if (noteArrows.has(reverse)) {
+          noteArrows.delete(reverse);
+        } else {
+          noteArrows.add(key);
+        }
       }
       rightDragStart = null;
       rightDragPreview = null;
       renderAnnotations();
       e.preventDefault();
+    });
+
+    window.addEventListener('blur', () => {
+      if (rightDragStart == null) return;
+      rightDragStart = null;
+      rightDragPreview = null;
+      renderAnnotations();
     });
   }
 
