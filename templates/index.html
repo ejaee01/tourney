@@ -251,8 +251,11 @@
     }
     const w = container.clientWidth - 20;
     const h = container.clientHeight - 28;
-    const minR = Math.min(...points.map(p => p.rating));
-    const maxR = Math.max(...points.map(p => p.rating));
+    const firstR = points[0].rating;
+    const maxDev = Math.max(...points.map(p => Math.abs(p.rating - firstR)));
+    const pad = Math.max(1, Math.ceil(maxDev * 1.1));
+    const minR = firstR - pad;
+    const maxR = firstR + pad;
     const span = Math.max(1, maxR - minR);
 
     const step = w / Math.max(1, points.length);
