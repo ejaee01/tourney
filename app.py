@@ -32,17 +32,24 @@ login_manager.login_view = "login_page"
 engine = ArenaEngine(app)
 
 with app.app_context():
-    for attempt in range(5):
+    for attempt in range(3):
         try:
             db.create_all()
-            print("Database connected and tables created.", flush=True)
+            print(f"Database connected: {_db_url.split('@')[-1] if '@' in _db_url else _db_url}", flush=True)
             break
         except Exception as e:
-            print(f"DB connect attempt {attempt+1}/5 failed: {e}", flush=True)
-            if attempt < 4:
-                time.sleep(3)
+            print(f"DB connect attempt {attempt+1}/3 failed: {e}", flush=True)
+            if attempt < 2:
+                time.sleep(2)
             else:
-                raise
+                if not _db_url.startswith("sqlite"):
+                    print("Falling back to SQLite.", flush=True)
+                    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tourney.db"
+                    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+                    db.engine.dispose()
+                    db.create_all()
+                else:
+                    raise
 
 engine.start()
 
