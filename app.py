@@ -4,7 +4,7 @@ import chess
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 
-from models import db, Player, Tournament, TournamentPlayer, Game, RatingHistory
+from models import db, Player, Tournament, TournamentPlayer, Game, RatingHistory, PairingHistory, TITLES
 from arena import ArenaEngine
 
 app = Flask(__name__)
@@ -448,6 +448,89 @@ def profile_page():
         tournaments=tournaments,
         recent_games=recent_games,
     )
+
+
+# ──────────────────────────────────────────
+# Admin pages + API
+# ──────────────────────────────────────────
+
+@app.route("/admin")
+@login_required
+def admin_page():
+    if not current_user.is_admin:
+        return redirect(url_for("index"))
+    players = Player.query.order_by(Player.username.asc()).all()
+    return render_template("admin.html", players=players, titles=TITLES)
+
+
+@app.route("/api/admin/ban/<int:player_id>", methods=["POST"])
+@login_required
+def admin_ban(player_id):
+    if not current_user.is_admin:
+        return jsonify({"error": "forbidden"}), 403
+    p = Player.query.get_or_404(player_id)
+    p.banned = True
+    db.session.commit()
+    return jsonify({"ok": True, "banned": True})
+
+
+@app.route("/api/admin/unban/<int:player_id>", methods=["POST"])
+@login_required
+def admin_unban(player_id):
+    if not current_user.is_admin:
+        return jsonify({"error": "forbidden"}), 403
+    p = Player.query.get_or_404(player_id)
+    p.banned = False
+    db.session.commit()
+    return jsonify({"ok": True, "banned": False})
+
+
+@app.route("/api/admin/delete/<int:player_id>", methods=["POST"])
+@login_required
+def admin_delete(player_id):
+    if not current_user.is_admin:
+        return jsonify({"error": "forbidden"}), 403
+    p = Player.query.get_or_404(player_id)
+    if p.is_admin:
+        return jsonify({"error": "cannot delete admin"}), 400
+    RatingHistory.query.filter_by(player_id=player_id).delete()
+    TournamentPlayer.query.filter_by(player_id=player_id).delete()
+    PairingHistory.query.filter(
+        db.or_(PairingHistory.player_a_id == player_id, PairingHistory.player_b_id == player_id)
+    ).delete(synchronize_session=False)
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/set-title/<int:player_id>", methods=["POST"])
+@login_required
+def admin_set_title(player_id):
+    if not current_user.is_admin:
+        return jsonify({"error": "forbidden"}), 403
+    p = Player.query.get_or_404(player_id)
+    data = request.get_json() or {}
+    title = data.get("title", "")
+    p.title = title if title in TITLES else None
+    db.session.commit()
+    return jsonify({"ok": True, "title": p.title})
+
+
+@app.route("/api/admin/reset-ratings", methods=["POST"])
+@login_required
+def admin_reset_ratings():
+    if not current_user.is_admin:
+        return jsonify({"error": "forbidden"}), 403
+    Player.query.update({
+        "rating": 500.0,
+        "rd": 250.0,
+        "volatility": 0.06,
+        "games_played": 0,
+        "provisional": True,
+    })
+    RatingHistory.query.delete()
+    db.session.commit()
+    return jsonify({"ok": True, "message": "All ratings reset to 500/250"})
 
 
 if __name__ == "__main__":

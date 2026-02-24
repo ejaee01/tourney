@@ -6,17 +6,19 @@
   <title>Register – Arena</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .box { background: #16213e; border: 1px solid #0f3460; border-radius: 12px; padding: 40px 36px; width: 360px; }
-    h1 { color: #e94560; font-size: 1.6rem; margin-bottom: 8px; }
-    p { color: #aaa; font-size: 0.88rem; margin-bottom: 24px; }
-    label { display: block; font-size: 0.82rem; color: #aaa; margin-bottom: 5px; }
-    input { width: 100%; padding: 10px 12px; background: #0f3460; border: 1px solid #1a4a8a; border-radius: 6px; color: #e0e0e0; font-size: 0.95rem; margin-bottom: 16px; }
-    button { width: 100%; background: #e94560; color: #fff; border: none; padding: 11px; border-radius: 6px; font-size: 1rem; cursor: pointer; }
-    button:hover { background: #c73652; }
-    .flash { background: #3d1a1a; border: 1px solid #e94560; color: #ef9a9a; padding: 10px 14px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 16px; }
-    .footer { margin-top: 20px; text-align: center; font-size: 0.85rem; color: #aaa; }
-    a { color: #64b5f6; text-decoration: none; }
+    body { background: #edebe9; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .box { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 40px 36px; width: 360px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    h1 { color: #333; font-size: 1.5rem; margin-bottom: 6px; }
+    p { color: #777; font-size: 0.88rem; margin-bottom: 24px; }
+    label { display: block; font-size: 0.82rem; color: #555; margin-bottom: 5px; font-weight: 600; }
+    input { width: 100%; padding: 9px 12px; background: #fff; border: 1px solid #bbb; border-radius: 3px; color: #333; font-size: 0.95rem; margin-bottom: 14px; }
+    input:focus { outline: none; border-color: #759900; box-shadow: 0 0 0 2px rgba(117,153,0,.15); }
+    button { width: 100%; background: #759900; color: #fff; border: none; padding: 11px; border-radius: 3px; font-size: 1rem; cursor: pointer; font-weight: 600; }
+    button:hover { background: #618200; }
+    .flash { background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 10px 14px; border-radius: 3px; font-size: 0.85rem; margin-bottom: 16px; }
+    .footer { margin-top: 20px; text-align: center; font-size: 0.85rem; color: #777; }
+    a { color: #4c82d5; text-decoration: none; }
+    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -33,7 +35,7 @@
   <form method="POST">
     <label>Username</label>
     <input name="username" placeholder="Choose a username" autocomplete="off" required />
-    <label>Email <span style="color:#666;font-size:0.78rem;">(optional)</span></label>
+    <label>Email <span style="color:#999;font-size:0.78rem;">(optional)</span></label>
     <input name="email" type="email" placeholder="your@email.com" />
     <label>Password</label>
     <input name="password" type="password" placeholder="At least 6 characters" required />

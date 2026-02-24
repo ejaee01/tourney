@@ -5,6 +5,21 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
+TITLES = ["GM", "IM", "FM", "CM", "NM", "WGM", "WIM", "WFM", "WCM", "BOT"]
+
+TITLE_COLORS = {
+    "GM":  "#f01010",
+    "IM":  "#e07000",
+    "FM":  "#c0a000",
+    "CM":  "#8888aa",
+    "NM":  "#999999",
+    "WGM": "#e01080",
+    "WIM": "#e07000",
+    "WFM": "#c0a000",
+    "WCM": "#8888aa",
+    "BOT": "#4e94d4",
+}
+
 
 class Player(UserMixin, db.Model):
     __tablename__ = "players"
@@ -18,6 +33,8 @@ class Player(UserMixin, db.Model):
     volatility = db.Column(db.Float, default=0.06)
     games_played = db.Column(db.Integer, default=0)
     provisional = db.Column(db.Boolean, default=True)
+    title = db.Column(db.String(10), nullable=True)
+    banned = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     tournament_players = db.relationship("TournamentPlayer", back_populates="player")
@@ -47,6 +64,8 @@ class Player(UserMixin, db.Model):
             "rd": round(self.rd, 1),
             "games_played": self.games_played,
             "provisional": self.is_provisional,
+            "title": self.title,
+            "banned": self.banned,
         }
 
 
@@ -113,6 +132,7 @@ class TournamentPlayer(db.Model):
             "player_id": self.player_id,
             "username": self.player.username,
             "rating": round(self.player.rating),
+            "title": self.player.title,
             "score": self.score,
             "win_streak": self.win_streak,
             "games_played": self.games_played,
@@ -169,8 +189,10 @@ class Game(db.Model):
             "id": self.id,
             "white": self.white.username,
             "white_id": self.white_id,
+            "white_title": self.white.title,
             "black": self.black.username,
             "black_id": self.black_id,
+            "black_title": self.black.title,
             "result": self.result,
             "white_berserk": self.white_berserk,
             "black_berserk": self.black_berserk,

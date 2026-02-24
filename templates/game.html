@@ -8,53 +8,65 @@
     href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
-    header { background: #16213e; padding: 14px 24px; display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #0f3460; }
-    header h1 { color: #e94560; font-size: 1.2rem; }
-    a { color: #64b5f6; text-decoration: none; font-size: 0.9rem; }
-    .layout { display: flex; gap: 24px; padding: 24px; max-width: 900px; margin: 0 auto; flex-wrap: wrap; }
+    body { background: #edebe9; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; }
+    header { background: #fff; padding: 10px 24px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    header h1 { color: #333; font-size: 1.2rem; }
+    a { color: #4c82d5; text-decoration: none; font-size: 0.9rem; }
+    a:hover { text-decoration: underline; }
+    .layout { display: flex; gap: 24px; padding: 20px; max-width: 900px; margin: 0 auto; flex-wrap: wrap; }
     .board-col { flex: 0 0 auto; }
-    .side-col { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 16px; }
-    .card { background: #16213e; border: 1px solid #0f3460; border-radius: 10px; padding: 16px; }
-    .player-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; background: #0f3460; }
-    .player-bar.active { background: #1a4a8a; border: 1px solid #64b5f6; }
-    .player-name { font-weight: bold; font-size: 1rem; }
-    .clock { font-size: 1.5rem; font-weight: bold; font-variant-numeric: tabular-nums; color: #ffd700; }
-    .clock.low { color: #e94560; animation: pulse 1s infinite; }
+    .side-col { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 14px; }
+    .player-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 4px; margin-bottom: 6px; background: #f5f5f5; border: 1px solid #e0e0e0; }
+    .player-bar.active { background: #e8f5e9; border-color: #c8e6c9; }
+    .player-name { font-weight: bold; font-size: 1rem; color: #333; }
+    .clock { font-size: 1.5rem; font-weight: bold; font-variant-numeric: tabular-nums; color: #333; }
+    .clock.low { color: #c62828; animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
-    button { background: #e94560; color: #fff; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; width: 100%; margin-bottom: 8px; }
-    button:hover { background: #c73652; }
-    button.secondary { background: #0f3460; }
-    button.secondary:hover { background: #1a4a8a; }
-    button:disabled { background: #333; cursor: default; }
-    #status { font-size: 1rem; text-align: center; padding: 10px; border-radius: 6px; background: #0f3460; }
-    #status.won { background: #1b3a1b; color: #81c784; }
-    #status.lost { background: #3d1a1a; color: #ef9a9a; }
-    #status.draw { background: #2a2a2a; color: #ccc; }
-    #moves { font-size: 0.82rem; color: #aaa; max-height: 120px; overflow-y: auto; word-break: break-all; line-height: 1.6; }
+    button { background: #759900; color: #fff; border: none; padding: 9px 16px; border-radius: 3px; cursor: pointer; font-size: 0.9rem; width: 100%; margin-bottom: 8px; font-weight: 600; }
+    button:hover { background: #618200; }
+    button.secondary { background: #eee; color: #333; border: 1px solid #ccc; }
+    button.secondary:hover { background: #e0e0e0; }
+    button:disabled { background: #e0e0e0; color: #aaa; cursor: default; }
+    #status { font-size: 1rem; text-align: center; padding: 10px; border-radius: 4px; background: #f5f5f5; border: 1px solid #ddd; color: #333; }
+    #status.won { background: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }
+    #status.lost { background: #fce4ec; color: #c62828; border-color: #ffcdd2; }
+    #status.draw { background: #f5f5f5; color: #777; border-color: #e0e0e0; }
+    #moves { font-size: 0.82rem; color: #555; max-height: 120px; overflow-y: auto; word-break: break-all; line-height: 1.6; font-family: monospace; }
     .berserk-btn { background: #6a1b9a; }
     .berserk-btn:hover { background: #4a0e72; }
-    #return-btn { display: none; background: #1a4a8a; }
-    #ping-bar { position: fixed; left: 14px; bottom: 14px; background: rgba(15,52,96,.92); border: 1px solid #1a4a8a; border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; display: flex; align-items: center; gap: 8px; z-index: 20; }
+    #return-btn { display: none; background: #4c82d5; }
+    #return-btn:hover { background: #3d6fbd; }
+    #ping-bar {
+      position: fixed; left: 14px; bottom: 14px;
+      background: #fff; border: 1px solid #ccc;
+      border-radius: 4px; padding: 8px 12px;
+      font-size: 0.82rem; display: flex; align-items: center; gap: 8px;
+      z-index: 20; box-shadow: 0 2px 6px rgba(0,0,0,.1); color: #333;
+    }
     .ping-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
-    .ping-bars span { width: 4px; background: #2d5a27; border-radius: 2px; opacity: .3; }
+    .ping-bars span { width: 4px; background: #ccc; border-radius: 2px; }
     .ping-bars span:nth-child(1) { height: 4px; }
     .ping-bars span:nth-child(2) { height: 6px; }
     .ping-bars span:nth-child(3) { height: 9px; }
     .ping-bars span:nth-child(4) { height: 12px; }
-    .ping-bars.good span { background: #81c784; opacity: 1; }
-    .ping-bars.medium span:nth-child(-n+3) { background: #ffd54f; opacity: 1; }
-    .ping-bars.medium span:nth-child(4) { opacity: .2; }
-    .ping-bars.bad span:nth-child(-n+2) { background: #ef9a9a; opacity: 1; }
-    .ping-bars.bad span:nth-child(n+3) { opacity: .2; }
-    .ping-bars.down span { background: #e94560; opacity: .25; }
+    .ping-bars.good span { background: #759900; }
+    .ping-bars.medium span:nth-child(-n+3) { background: #e07000; }
+    .ping-bars.medium span:nth-child(4) { background: #ccc; }
+    .ping-bars.bad span:nth-child(-n+2) { background: #c62828; }
+    .ping-bars.bad span:nth-child(n+3) { background: #ccc; }
+    .ping-bars.down span { background: #ccc; }
+
+    /* Lichess CBurnett board colors override */
+    .white-1e1d7 { background-color: #f0d9b5 !important; }
+    .black-3c85d { background-color: #b58863 !important; }
   </style>
 </head>
 <body>
 <header>
   <a href="/">← Home</a>
   <h1>♟ Live Game</h1>
-  <span id="tc-label" style="color:#aaa;margin-left:auto;font-size:0.85rem;"></span>
+  <span id="tc-label" style="color:#777;margin-left:auto;font-size:0.85rem;"></span>
 </header>
 
 <div class="layout">
@@ -77,19 +89,19 @@
       <button id="resign-btn" onclick="resign()">Resign</button>
       <button class="berserk-btn" id="berserk-btn" onclick="berserk()">⚡ Berserk</button>
       <button class="secondary" onclick="claimTime()">Claim on time</button>
-      <button class="secondary" id="return-btn" onclick="window.history.back()">← Back to Tournament</button>
+      <button class="secondary" id="return-btn" onclick="window.history.back()">← Back</button>
     </div>
 
     <div class="card">
-      <div style="font-size:0.8rem;color:#aaa;margin-bottom:6px;">Move list</div>
+      <div style="font-size:0.8rem;color:#777;margin-bottom:6px;">Move list</div>
       <div id="moves"></div>
     </div>
   </div>
 </div>
 
 <div id="ping-bar">
-  <div id="ping-text">Ping: -- ms</div>
   <div id="ping-bars" class="ping-bars down"><span></span><span></span><span></span><span></span></div>
+  <div id="ping-text">-- ms</div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -209,11 +221,11 @@
     const text = document.getElementById('ping-text');
     const bars = document.getElementById('ping-bars');
     if (!ok || ms == null) {
-      text.textContent = 'Ping: offline';
+      text.textContent = 'offline';
       bars.className = 'ping-bars down';
       return;
     }
-    text.textContent = `Ping: ${ms} ms`;
+    text.textContent = `${ms} ms`;
     if (ms < 120) bars.className = 'ping-bars good';
     else if (ms < 280) bars.className = 'ping-bars medium';
     else bars.className = 'ping-bars bad';
@@ -222,8 +234,8 @@
   async function updatePing() {
     const start = performance.now();
     try {
-      const r = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
-      if (!r.ok) throw new Error('ping failed');
+      const r = await fetch('/api/stats', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) throw new Error();
       const ms = Math.round(performance.now() - start);
       renderPing(ms, true);
     } catch (e) {
@@ -240,7 +252,6 @@
   }
 
   async function onDrop(source, target) {
-    const uci = source + target;
     const promotion = 'q';
     const fullUci = source + target + (isPromotion(source, target) ? promotion : '');
 
@@ -264,7 +275,7 @@
 
   async function resign() {
     if (!confirm('Resign this game?')) return;
-    const data = await api(`/api/games/${GAME_ID}/resign`, 'POST');
+    await api(`/api/games/${GAME_ID}/resign`, 'POST');
     await poll();
   }
 
@@ -294,7 +305,9 @@
       onDragStart,
       onDrop,
       onSnapEnd,
-      pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+      pieceTheme: function(piece) {
+        return `https://lichess1.org/assets/piece/cburnett/${piece}.svg`;
+      },
     });
 
     applyState(data);

@@ -6,64 +6,70 @@
   <title>Arena Tournaments</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
-    header { background: #16213e; padding: 14px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #0f3460; }
-    header h1 { font-size: 1.5rem; color: #e94560; }
+    body { background: #edebe9; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; }
+    header { background: #fff; padding: 10px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    header h1 { font-size: 1.4rem; color: #333; letter-spacing: -0.5px; }
     .nav { margin-left: auto; display: flex; gap: 14px; align-items: center; font-size: 0.9rem; }
-    .nav a { color: #64b5f6; text-decoration: none; }
-    .nav .username { color: #ffd700; font-weight: bold; }
-    .container { max-width: 960px; margin: 28px auto; padding: 0 16px; }
-    .card { background: #16213e; border-radius: 10px; padding: 22px; margin-bottom: 22px; border: 1px solid #0f3460; }
-    .card h2 { color: #e94560; margin-bottom: 14px; font-size: 1.1rem; }
-    label { display: block; margin-bottom: 5px; font-size: 0.82rem; color: #aaa; }
-    input, select { width: 100%; padding: 8px 11px; background: #0f3460; border: 1px solid #1a4a8a; border-radius: 6px; color: #e0e0e0; font-size: 0.93rem; margin-bottom: 11px; }
-    button { background: #e94560; color: #fff; border: none; padding: 9px 18px; border-radius: 6px; cursor: pointer; font-size: 0.93rem; }
-    button:hover { background: #c73652; }
-    .msg { margin-top: 7px; font-size: 0.83rem; color: #4caf50; }
-    .msg.err { color: #e94560; }
+    .nav a { color: #4c82d5; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .nav .username { color: #333; font-weight: bold; }
+    .nav .rating-badge { color: #666; }
+    .container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 4px; padding: 20px; margin-bottom: 18px; border: 1px solid #ddd; }
+    .card h2 { color: #333; margin-bottom: 14px; font-size: 1rem; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+    label { display: block; margin-bottom: 4px; font-size: 0.82rem; color: #555; font-weight: 600; }
+    input, select { width: 100%; padding: 7px 10px; background: #fff; border: 1px solid #bbb; border-radius: 3px; color: #333; font-size: 0.93rem; margin-bottom: 10px; }
+    input:focus, select:focus { outline: none; border-color: #759900; box-shadow: 0 0 0 2px rgba(117,153,0,.15); }
+    button { background: #759900; color: #fff; border: none; padding: 9px 18px; border-radius: 3px; cursor: pointer; font-size: 0.93rem; font-weight: 600; }
+    button:hover { background: #618200; }
+    .msg { margin-top: 7px; font-size: 0.83rem; color: #759900; }
+    .msg.err { color: #c62828; }
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 7px 10px; color: #aaa; font-size: 0.78rem; text-transform: uppercase; border-bottom: 1px solid #0f3460; }
-    td { padding: 9px 10px; border-bottom: 1px solid #0f3460; font-size: 0.88rem; }
-    tr:hover td { background: #1e2d4f; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.74rem; }
-    .badge.waiting  { background: #2d5a27; color: #81c784; }
-    .badge.active   { background: #7b1e1e; color: #ef9a9a; }
-    .badge.finished { background: #333; color: #999; }
-    a { color: #64b5f6; text-decoration: none; }
+    th { text-align: left; padding: 7px 10px; color: #777; font-size: 0.78rem; text-transform: uppercase; border-bottom: 1px solid #eee; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 0.88rem; }
+    tr:hover td { background: #f8f7f5; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.74rem; font-weight: 600; }
+    .badge.waiting  { background: #e8f5e9; color: #388e3c; border: 1px solid #c8e6c9; }
+    .badge.active   { background: #fce4ec; color: #c62828; border: 1px solid #ffcdd2; }
+    .badge.finished { background: #f5f5f5; color: #999; border: 1px solid #e0e0e0; }
+    a { color: #4c82d5; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
-    .alert { background: #7b3a00; border: 1px solid #ffa000; color: #ffcc80; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; }
-    .alert a { color: #ffd700; font-weight: bold; }
-    .guest-note { background: #0f2a0f; border: 1px solid #2e7d32; color: #a5d6a7; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; font-size: 0.88rem; }
-    .guest-note a { color: #66bb6a; }
-    .perf-highlight { font-size: 1.3rem; font-weight: bold; color: #64b5f6; }
-    .profile-btn { display: inline-block; margin-top: 16px; background: #1a4a8a; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 0.93rem; text-decoration: none; }
-    .profile-btn:hover { background: #2457a2; text-decoration: none; }
-    .chart-wrap { height: 180px; background: #0f1c35; border: 1px solid #0f3460; border-radius: 8px; padding: 10px; }
+    .alert { background: #fffde7; border: 1px solid #f9a825; color: #5d4037; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .alert a { color: #e65100; font-weight: bold; }
+    .guest-note { background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; font-size: 0.88rem; }
+    .guest-note a { color: #1b5e20; font-weight: bold; }
+    .perf-highlight { font-size: 1.3rem; font-weight: bold; color: #333; }
+    .profile-btn { display: inline-block; margin-top: 14px; background: #759900; color: #fff; padding: 9px 16px; border-radius: 3px; font-size: 0.9rem; text-decoration: none; font-weight: 600; }
+    .profile-btn:hover { background: #618200; text-decoration: none; }
+    .chart-wrap { height: 180px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px; }
+    .title-badge { font-weight: bold; font-size: 0.8rem; margin-right: 3px; }
     #ping-bar {
       position: fixed; left: 14px; bottom: 14px;
-      background: rgba(15,52,96,.95); border: 1px solid #1a4a8a;
-      border-radius: 10px; padding: 10px 14px;
+      background: #fff; border: 1px solid #ccc;
+      border-radius: 4px; padding: 10px 14px;
       font-size: 0.8rem; display: flex; flex-direction: column; gap: 6px;
-      z-index: 20; min-width: 160px;
+      z-index: 20; min-width: 165px; box-shadow: 0 2px 6px rgba(0,0,0,.1);
     }
     .ping-row { display: flex; align-items: center; gap: 8px; }
     .ping-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
-    .ping-bars span { width: 4px; background: #2d5a27; border-radius: 2px; opacity: .3; }
+    .ping-bars span { width: 4px; background: #ccc; border-radius: 2px; }
     .ping-bars span:nth-child(1) { height: 4px; }
     .ping-bars span:nth-child(2) { height: 6px; }
     .ping-bars span:nth-child(3) { height: 9px; }
     .ping-bars span:nth-child(4) { height: 12px; }
-    .ping-bars.good span { background: #81c784; opacity: 1; }
-    .ping-bars.medium span:nth-child(-n+3) { background: #ffd54f; opacity: 1; }
-    .ping-bars.medium span:nth-child(4) { opacity: .2; }
-    .ping-bars.bad span:nth-child(-n+2) { background: #ef9a9a; opacity: 1; }
-    .ping-bars.bad span:nth-child(n+3) { opacity: .2; }
-    .ping-bars.down span { background: #e94560; opacity: .25; }
-    .ping-stat { color: #aaa; font-size: 0.78rem; }
-    .ping-stat span { color: #e0e0e0; font-weight: bold; }
-    .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #81c784; display: inline-block; box-shadow: 0 0 4px #81c784; }
+    .ping-bars.good span { background: #759900; }
+    .ping-bars.medium span:nth-child(-n+3) { background: #e07000; }
+    .ping-bars.medium span:nth-child(4) { background: #ccc; }
+    .ping-bars.bad span:nth-child(-n+2) { background: #c62828; }
+    .ping-bars.bad span:nth-child(n+3) { background: #ccc; }
+    .ping-bars.down span { background: #ccc; }
+    .ping-stat { color: #777; font-size: 0.78rem; }
+    .ping-stat span { color: #333; font-weight: bold; }
+    .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #759900; display: inline-block; margin-right: 3px; }
+    .admin-link { margin-left: 10px; background: #c62828; color: #fff; padding: 4px 10px; border-radius: 3px; font-size: 0.82rem; font-weight: bold; }
+    .admin-link:hover { background: #b71c1c; text-decoration: none; }
   </style>
 </head>
 <body>
@@ -71,13 +77,18 @@
   <h1>♟ Arena</h1>
   <div class="nav">
     {% if current_user.is_authenticated %}
+      {% if current_user.title %}
+        <span class="title-badge" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(current_user.title,'#333') }}">{{ current_user.title }}</span>
+      {% endif %}
       <span class="username">{{ current_user.username }}</span>
-      <span style="color:#aaa">·</span>
-      <span style="color:#aaa">{{ current_user.rating | int }} rating</span>
+      <span class="rating-badge">{{ current_user.rating | int }}</span>
+      {% if current_user.is_admin %}
+        <a href="/admin" class="admin-link">Admin</a>
+      {% endif %}
       <a href="/logout">Log out</a>
     {% else %}
       <a href="/login">Log in</a>
-      <a href="/register" style="background:#e94560;color:#fff;padding:6px 14px;border-radius:6px;">Register</a>
+      <a href="/register" style="background:#759900;color:#fff;padding:6px 14px;border-radius:3px;font-weight:600;">Register</a>
     {% endif %}
   </div>
 </header>
@@ -99,11 +110,11 @@
     <div class="card">
       <h2>Your Stats</h2>
       <table>
-        <tr><td style="color:#aaa">Rating</td><td style="font-weight:bold;color:#ffd700">{{ current_user.rating | int }}</td></tr>
-        <tr><td style="color:#aaa">RD</td><td>{{ "%.1f" | format(current_user.rd) }}</td></tr>
-        <tr><td style="color:#aaa">Games played</td><td>{{ current_user.games_played }}</td></tr>
+        <tr><td style="color:#777">Rating</td><td style="font-weight:bold;font-size:1.1rem;">{{ current_user.rating | int }}</td></tr>
+        <tr><td style="color:#777">RD</td><td>{{ "%.1f" | format(current_user.rd) }}</td></tr>
+        <tr><td style="color:#777">Games played</td><td>{{ current_user.games_played }}</td></tr>
         <tr>
-          <td style="color:#aaa">Performance (last 3 tournaments)</td>
+          <td style="color:#777">Performance (last 3)</td>
           <td><span class="perf-highlight" id="perf-last-3">—</span></td>
         </tr>
       </table>
@@ -166,13 +177,15 @@
 <div id="ping-bar">
   <div class="ping-row">
     <div id="ping-bars" class="ping-bars down"><span></span><span></span><span></span><span></span></div>
-    <div id="ping-text" style="color:#e0e0e0;font-weight:bold;">-- ms</div>
+    <div id="ping-text" style="color:#333;font-weight:bold;">-- ms</div>
   </div>
-  <div class="ping-stat">Games played: <span id="stat-games">—</span></div>
-  <div class="ping-stat"><span class="online-dot"></span> Online: <span id="stat-online">—</span></div>
+  <div class="ping-stat">Games: <span id="stat-games">—</span></div>
+  <div class="ping-stat"><span class="online-dot"></span>Online: <span id="stat-online">—</span></div>
 </div>
 
 <script>
+  const TITLE_COLORS = {GM:'#f01010',IM:'#e07000',FM:'#c0a000',CM:'#8888aa',NM:'#999',WGM:'#e01080',WIM:'#e07000',WFM:'#c0a000',WCM:'#8888aa',BOT:'#4e94d4'};
+
   async function api(url, method='GET', body=null) {
     const opts = { method, headers:{'Content-Type':'application/json'}, credentials:'same-origin' };
     if (body) opts.body = JSON.stringify(body);
@@ -207,13 +220,15 @@
 
   async function loadPlayers() {
     const list = await api('/api/players');
-    document.getElementById('p-list').innerHTML = list.slice(0,10).map((p,i)=>`
-      <tr>
+    document.getElementById('p-list').innerHTML = list.slice(0,10).map((p,i)=>{
+      const tc = p.title ? `<span style="color:${TITLE_COLORS[p.title]||'#333'};font-weight:bold;font-size:0.8rem;margin-right:3px;">${p.title}</span>` : '';
+      return `<tr>
         <td>${i+1}</td>
-        <td>${p.username}${p.provisional?' <sup style="color:#aaa">?</sup>':''}</td>
-        <td style="color:#ffd700;font-weight:bold">${p.rating}</td>
-        <td>${p.games_played}</td>
-      </tr>`).join('');
+        <td>${tc}${p.username}${p.provisional?' <sup style="color:#999">?</sup>':''}</td>
+        <td style="font-weight:bold;">${p.rating}</td>
+        <td style="color:#777">${p.games_played}</td>
+      </tr>`;
+    }).join('');
   }
 
   async function checkActiveGame() {
@@ -254,30 +269,29 @@
     ].join(' ');
 
     const last = pts[pts.length - 1];
-
     const gridRatings = [minR, Math.round((minR+maxR)/2), maxR];
     const gridLines = gridRatings.map(val => {
       const gy = h - ((val - minR) / span) * h;
-      return `<line x1="0" y1="${gy.toFixed(1)}" x2="${w}" y2="${gy.toFixed(1)}" stroke="#0f3460" stroke-width="1"/>
-              <text x="2" y="${(gy - 3).toFixed(1)}" fill="#555" font-size="9">${val}</text>`;
+      return `<line x1="0" y1="${gy.toFixed(1)}" x2="${w}" y2="${gy.toFixed(1)}" stroke="#e0e0e0" stroke-width="1"/>
+              <text x="2" y="${(gy - 3).toFixed(1)}" fill="#aaa" font-size="9">${val}</text>`;
     }).join('');
 
     container.innerHTML = `
       <svg viewBox="0 0 ${w} ${h + 4}" width="100%" height="${h + 4}">
         <defs>
           <linearGradient id="eloGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#64b5f6" stop-opacity="0.28"/>
-            <stop offset="100%" stop-color="#64b5f6" stop-opacity="0"/>
+            <stop offset="0%" stop-color="#759900" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#759900" stop-opacity="0"/>
           </linearGradient>
         </defs>
         ${gridLines}
         <path d="${area}" fill="url(#eloGrad)" />
-        <polyline fill="none" stroke="#64b5f6" stroke-width="2" stroke-linejoin="round" points="${polyline}" />
-        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="#64b5f6" />
+        <polyline fill="none" stroke="#759900" stroke-width="2" stroke-linejoin="round" points="${polyline}" />
+        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="#759900" />
       </svg>
       <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#aaa;margin-top:3px;">
         <span>${minR}</span>
-        <span style="color:#64b5f6;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
+        <span style="color:#759900;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
         <span>${maxR}</span>
       </div>`;
   }
@@ -306,9 +320,7 @@
   async function updatePingAndStats() {
     const start = performance.now();
     try {
-      const [statsRes] = await Promise.all([
-        fetch('/api/stats', { credentials: 'same-origin', cache: 'no-store' }),
-      ]);
+      const statsRes = await fetch('/api/stats', { credentials: 'same-origin', cache: 'no-store' });
       const ms = Math.round(performance.now() - start);
       renderPing(ms, true);
       if (statsRes.ok) {

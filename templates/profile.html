@@ -6,40 +6,46 @@
   <title>{{ current_user.username }} – Profile</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
-    header { background: #16213e; padding: 14px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #0f3460; }
-    header h1 { font-size: 1.3rem; color: #e94560; }
-    a { color: #64b5f6; text-decoration: none; }
+    body { background: #edebe9; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; }
+    header { background: #fff; padding: 10px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    header h1 { font-size: 1.3rem; color: #333; }
+    a { color: #4c82d5; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
-    .card { background: #16213e; border: 1px solid #0f3460; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
-    .card h2 { color: #e94560; font-size: 1.05rem; margin-bottom: 12px; }
-    .metric { display: flex; justify-content: space-between; border-bottom: 1px solid #0f3460; padding: 9px 0; font-size: 0.92rem; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 18px; margin-bottom: 16px; }
+    .card h2 { color: #333; font-size: 1rem; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+    .metric { display: flex; justify-content: space-between; border-bottom: 1px solid #f0f0f0; padding: 8px 0; font-size: 0.92rem; }
     .metric:last-child { border-bottom: 0; }
-    .value { font-weight: bold; color: #ffd700; }
-    .value.blue { color: #64b5f6; font-size: 1.25rem; }
+    .value { font-weight: bold; color: #333; }
+    .value.blue { color: #4c82d5; font-size: 1.2rem; }
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 8px 10px; color: #aaa; border-bottom: 1px solid #0f3460; font-size: 0.76rem; text-transform: uppercase; }
-    td { padding: 9px 10px; border-bottom: 1px solid #0f3460; font-size: 0.86rem; }
-    tr:hover td { background: #1e2d4f; }
-    .chart-wrap { height: 240px; border: 1px solid #0f3460; border-radius: 8px; background: #0f1c35; padding: 10px; }
-    .empty { color: #aaa; font-size: 0.9rem; padding-top: 10px; }
-    .win { color: #81c784; font-weight: bold; }
-    .loss { color: #ef9a9a; }
-    .draw { color: #aaa; }
-    .ongoing { color: #ffd54f; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.74rem; }
-    .badge.waiting  { background: #2d5a27; color: #81c784; }
-    .badge.active   { background: #7b1e1e; color: #ef9a9a; }
-    .badge.finished { background: #333; color: #999; }
+    th { text-align: left; padding: 7px 10px; color: #777; border-bottom: 1px solid #eee; font-size: 0.76rem; text-transform: uppercase; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 0.86rem; }
+    tr:hover td { background: #f8f7f5; }
+    .chart-wrap { height: 240px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fafafa; padding: 10px; }
+    .empty { color: #999; font-size: 0.9rem; padding-top: 10px; }
+    .win { color: #388e3c; font-weight: bold; }
+    .loss { color: #c62828; }
+    .draw { color: #777; }
+    .ongoing { color: #e07000; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.74rem; font-weight: 600; }
+    .badge.waiting  { background: #e8f5e9; color: #388e3c; border: 1px solid #c8e6c9; }
+    .badge.active   { background: #fce4ec; color: #c62828; border: 1px solid #ffcdd2; }
+    .badge.finished { background: #f5f5f5; color: #999; border: 1px solid #e0e0e0; }
+    .title-tag { font-weight: bold; margin-right: 4px; }
   </style>
 </head>
 <body>
 <header>
   <a href="/">← Home</a>
-  <h1>{{ current_user.username }}'s Profile</h1>
+  <h1>
+    {% if current_user.title %}
+      <span class="title-tag" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(current_user.title,'#333') }}">{{ current_user.title }}</span>
+    {% endif %}
+    {{ current_user.username }}'s Profile
+  </h1>
 </header>
 
 <div class="container">
@@ -48,15 +54,15 @@
       <h2>Rating &amp; Stats</h2>
       <div class="metric">
         <span>Elo Rating</span>
-        <span class="value">{{ current_user.rating | int }}</span>
+        <span class="value" style="font-size:1.2rem;">{{ current_user.rating | int }}</span>
       </div>
       <div class="metric">
         <span>Rating Deviation (RD)</span>
-        <span>{{ '%.1f' | format(current_user.rd) }}</span>
+        <span class="value">{{ '%.1f' | format(current_user.rd) }}</span>
       </div>
       <div class="metric">
         <span>Games Played</span>
-        <span>{{ current_user.games_played }}</span>
+        <span class="value">{{ current_user.games_played }}</span>
       </div>
       <div class="metric">
         <span>Performance (last 3 tournaments)</span>
@@ -65,7 +71,7 @@
     </div>
 
     <div class="card">
-      <h2>Elo Graph (Last 90 Days)</h2>
+      <h2>Elo Graph <span style="color:#aaa;font-size:0.82rem;font-weight:normal;">last 90 days</span></h2>
       <div id="rating-chart" class="chart-wrap"></div>
     </div>
   </div>
@@ -90,15 +96,15 @@
         <tr style="cursor:pointer;" onclick="window.location='/tournament/{{ t.id }}'">
           <td><a href="/tournament/{{ t.id }}">{{ t.name }}</a></td>
           <td><span class="badge {{ t.status }}">{{ t.status }}</span></td>
-          <td style="font-weight:bold;color:#ffd700;">{{ tp.score }}</td>
+          <td style="font-weight:bold;">{{ tp.score }}</td>
           <td>
             <span class="win">{{ tp.wins }}</span> /
             <span class="draw">{{ tp.draws }}</span> /
             <span class="loss">{{ tp.losses }}</span>
           </td>
           <td>{{ tp.games_played }}</td>
-          <td style="color:#64b5f6;">{{ tp.performance_rating | int if tp.performance_rating else '—' }}</td>
-          <td><a href="/tournament/{{ t.id }}">View →</a></td>
+          <td style="color:#4c82d5;">{{ tp.performance_rating | int if tp.performance_rating else '—' }}</td>
+          <td><a href="/tournament/{{ t.id }}" onclick="event.stopPropagation()">View →</a></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -140,7 +146,7 @@
           {% set res_class = 'loss' %}
         {% endif %}
         <tr style="cursor:pointer;" onclick="window.location='/game/{{ g.id }}'">
-          <td>{{ g.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td style="color:#777;">{{ g.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
           <td>{{ 'White' if as_white else 'Black' }}</td>
           <td>{{ opp_name }}</td>
           <td class="{{ res_class }}">{{ me_result }}</td>
@@ -173,11 +179,10 @@
     const pts = points.map((p, i) => {
       const x = (i / Math.max(1, points.length - 1)) * w;
       const y = h - ((p.rating - minR) / span) * h;
-      return { x, y, rating: p.rating, ts: p.timestamp };
+      return { x, y, rating: p.rating };
     });
 
     const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-
     const areaPath = [
       `M ${pts[0].x.toFixed(1)},${h}`,
       ...pts.map(p => `L ${p.x.toFixed(1)},${p.y.toFixed(1)}`),
@@ -186,30 +191,29 @@
     ].join(' ');
 
     const last = pts[pts.length - 1];
-
     const gridLines = [0, 0.25, 0.5, 0.75, 1].map(frac => {
       const val = Math.round(minR + frac * span);
       const y = h - frac * h;
-      return `<line x1="0" y1="${y.toFixed(1)}" x2="${w}" y2="${y.toFixed(1)}" stroke="#0f3460" stroke-width="1"/>
-              <text x="2" y="${(y - 2).toFixed(1)}" fill="#555" font-size="9">${val}</text>`;
+      return `<line x1="0" y1="${y.toFixed(1)}" x2="${w}" y2="${y.toFixed(1)}" stroke="#e0e0e0" stroke-width="1"/>
+              <text x="2" y="${(y - 2).toFixed(1)}" fill="#aaa" font-size="9">${val}</text>`;
     }).join('');
 
     container.innerHTML = `
       <svg viewBox="0 0 ${w} ${h + 4}" width="100%" height="${h + 4}">
         <defs>
           <linearGradient id="profGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#64b5f6" stop-opacity="0.3"/>
-            <stop offset="100%" stop-color="#64b5f6" stop-opacity="0"/>
+            <stop offset="0%" stop-color="#759900" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#759900" stop-opacity="0"/>
           </linearGradient>
         </defs>
         ${gridLines}
         <path d="${areaPath}" fill="url(#profGrad)" />
-        <polyline fill="none" stroke="#64b5f6" stroke-width="2" stroke-linejoin="round" points="${polyline}" />
-        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="#64b5f6" />
+        <polyline fill="none" stroke="#759900" stroke-width="2" stroke-linejoin="round" points="${polyline}" />
+        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="#759900" />
       </svg>
       <div style="display:flex;justify-content:space-between;font-size:0.76rem;color:#aaa;margin-top:4px;">
         <span>Min: ${minR}</span>
-        <span style="color:#64b5f6;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
+        <span style="color:#759900;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
         <span>Max: ${maxR}</span>
       </div>
     `;
