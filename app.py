@@ -9,12 +9,20 @@ from arena import ArenaEngine
 
 app = Flask(__name__)
 import os
+import time
 _db_url = os.environ.get("DATABASE_URL", "sqlite:///tourney.db")
 if _db_url.startswith("postgres://"):
     _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+if _db_url.startswith("postgresql://") and "sslmode" not in _db_url:
+    _db_url += "?sslmode=require"
 app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = "arena-secret-change-in-prod"
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+    "connect_args": {"connect_timeout": 10} if _db_url.startswith("postgresql") else {},
+}
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "arena-secret-change-in-prod")
 
 db.init_app(app)
 
@@ -24,7 +32,17 @@ login_manager.login_view = "login_page"
 engine = ArenaEngine(app)
 
 with app.app_context():
-    db.create_all()
+    for attempt in range(5):
+        try:
+            db.create_all()
+            print("Database connected and tables created.", flush=True)
+            break
+        except Exception as e:
+            print(f"DB connect attempt {attempt+1}/5 failed: {e}", flush=True)
+            if attempt < 4:
+                time.sleep(3)
+            else:
+                raise
 
 engine.start()
 
