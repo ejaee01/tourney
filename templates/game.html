@@ -136,13 +136,11 @@
     statusEl.className = '';
   }
 
-  function rankLabel(value) {
-    return (value === null || value === undefined) ? '?' : value;
-  }
-
-  function ratingWithRank(rating, rank) {
-    if (rating === null || rating === undefined) return '—';
-    return `${rating} (${rankLabel(rank)})`;
+  function playerLabel(name, title, rating, rank) {
+    const titlePart = title ? ` (${title})` : '';
+    const ratingPart = (rating === null || rating === undefined) ? '' : ` (${rating})`;
+    const rankPart = (rank === null || rank === undefined) ? '' : ` (#${rank})`;
+    return `${name}${titlePart}${ratingPart}${rankPart}`;
   }
 
   async function api(url, method='GET', body=null) {
@@ -364,25 +362,20 @@
 	      document.getElementById('claim-btn').style.display = 'none';
 	    }
 
-	    document.getElementById('my-name').textContent       = myColor === 'white' ? data.white : data.black;
-	    document.getElementById('opponent-name').textContent = myColor === 'white' ? data.black : data.white;
-    // display titles with colors
-    const myTitle = myColor === 'white' ? data.white_title : data.black_title;
-    const oppTitle = myColor === 'white' ? data.black_title : data.white_title;
-    if (myTitle) {
-      document.getElementById('my-title').textContent = myTitle;
-      document.getElementById('my-title').style.color = TITLE_COLORS[myTitle] || '#333';
-    }
-    if (oppTitle) {
-      document.getElementById('opponent-title').textContent = oppTitle;
-      document.getElementById('opponent-title').style.color = TITLE_COLORS[oppTitle] || '#333';
-    }
-    document.getElementById('my-rating').textContent      = myColor === 'white'
-      ? ratingWithRank(data.white_rating, data.white_rank)
-      : ratingWithRank(data.black_rating, data.black_rank);
-    document.getElementById('opponent-rating').textContent = myColor === 'white'
-      ? ratingWithRank(data.black_rating, data.black_rank)
-      : ratingWithRank(data.white_rating, data.white_rank);
+      const myIsWhite = myColor === 'white';
+      const myLabel = myIsWhite
+        ? playerLabel(data.white, data.white_title, data.white_rating, data.white_tournament_rank ?? data.white_rank)
+        : playerLabel(data.black, data.black_title, data.black_rating, data.black_tournament_rank ?? data.black_rank);
+      const oppLabel = myIsWhite
+        ? playerLabel(data.black, data.black_title, data.black_rating, data.black_tournament_rank ?? data.black_rank)
+        : playerLabel(data.white, data.white_title, data.white_rating, data.white_tournament_rank ?? data.white_rank);
+
+      document.getElementById('my-name').textContent = myLabel;
+      document.getElementById('opponent-name').textContent = oppLabel;
+      document.getElementById('my-title').textContent = '';
+      document.getElementById('opponent-title').textContent = '';
+      document.getElementById('my-rating').textContent = '';
+      document.getElementById('opponent-rating').textContent = '';
 	    board = Chessboard('board', {
 	      draggable: !SPECTATOR,
 	      position: data.fen,

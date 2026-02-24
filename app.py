@@ -52,6 +52,8 @@ login_manager = LoginManager(app)
 login_manager.login_view = "login_page"
 
 engine = ArenaEngine(app)
+_bot_move_lock = threading.Lock()
+_bot_move_inflight = set()
 
 with app.app_context():
     for attempt in range(3):
@@ -125,6 +127,49 @@ def _performance_last_3_tournaments(player_id):
     if not values:
         return None
     return round(sum(values) / len(values))
+
+
+def _tournament_rank_map(tournament_id):
+    if not tournament_id:
+        return {}
+    rows = TournamentPlayer.query.filter_by(tournament_id=tournament_id).all()
+    ranked = sorted(
+        rows,
+        key=lambda tp: (
+            -tp.score,
+            -tp.performance_rating,
+            -tp.games_played,
+            tp.joined_at,
+        ),
+    )
+    return {tp.player_id: i + 1 for i, tp in enumerate(ranked)}
+
+
+def _game_payload(game, rank_map=None):
+    payload = game.to_dict()
+    payload["tournament_id"] = game.tournament_id
+    if rank_map is None and game.tournament_id:
+        rank_map = _tournament_rank_map(game.tournament_id)
+    payload["white_tournament_rank"] = rank_map.get(game.white_id) if rank_map else None
+    payload["black_tournament_rank"] = rank_map.get(game.black_id) if rank_map else None
+    return payload
+
+
+def _queue_bot_move(game_id):
+    with _bot_move_lock:
+        if game_id in _bot_move_inflight:
+            return False
+        _bot_move_inflight.add(game_id)
+
+    def _worker():
+        try:
+            _maybe_play_bot_move(game_id)
+        finally:
+            with _bot_move_lock:
+                _bot_move_inflight.discard(game_id)
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return True
 
 
 # ──────────────────────────────────────────
@@ -333,6 +378,7 @@ def _create_casual_game(player_a_id, player_b_id, time_control):
         white_clock_ms=base_ms,
         black_clock_ms=base_ms,
         increment_ms=inc_ms,
+        last_clock_update=now,
     )
     db.session.add(game)
     db.session.commit()
@@ -559,9 +605,10 @@ def leaderboard(tournament_id):
 
 @app.route("/api/tournaments/<int:tournament_id>/games")
 def tournament_games(tournament_id):
+    rank_map = _tournament_rank_map(tournament_id)
     games = (Game.query.filter_by(tournament_id=tournament_id)
              .order_by(Game.started_at.desc()).limit(50).all())
-    return jsonify([g.to_dict() for g in games])
+    return jsonify([_game_payload(g, rank_map=rank_map) for g in games])
 
 
 # ──────────────────────────────────────────
@@ -570,9 +617,13 @@ def tournament_games(tournament_id):
 
 @app.route("/api/games/<int:game_id>")
 def get_game(game_id):
+    game = Game.query.get_or_404(game_id)
+    if game.result == "ongoing" and not game.last_clock_update:
+        game.last_clock_update = game.started_at or datetime.utcnow()
+        db.session.commit()
     # play bot move in background if needed (non-blocking)
-    threading.Thread(target=_maybe_play_bot_move, args=(game_id,), daemon=True).start()
-    return jsonify(Game.query.get_or_404(game_id).to_dict())
+    _queue_bot_move(game_id)
+    return jsonify(_game_payload(game))
 
 
 @app.route("/api/games/<int:game_id>/move", methods=["POST"])
@@ -647,82 +698,88 @@ def make_move(game_id):
 
     if not result:
         # run bot move in background thread to avoid blocking the response
-        threading.Thread(target=_maybe_play_bot_move, args=(game_id,), daemon=True).start()
-    return jsonify(Game.query.get_or_404(game_id).to_dict())
+        _queue_bot_move(game_id)
+    return jsonify(_game_payload(Game.query.get_or_404(game_id)))
 
 
 def _maybe_play_bot_move(game_id):
-    game = Game.query.filter_by(id=game_id).with_for_update().first()
-    if not game or game.result != "ongoing":
-        return False
-
-    try:
-        board = chess.Board(game.fen)
-    except Exception:
-        return False
-
-    to_move_id = game.white_id if board.turn == chess.WHITE else game.black_id
-    bot = Player.query.get(to_move_id)
-    if not bot or bot.title != "BOT" or bot.banned:
-        return False
-
-    cfg = BotConfig.query.get(bot.id)
-    bot_key = (cfg.bot_key if cfg and cfg.bot_key else "random_capture")
-    bot_engine = get_engine(bot_key) or get_engine("random_capture")
-
-    move = None
-    if bot_engine:
+    with app.app_context():
         try:
-            move = bot_engine.choose_move(board.copy())
-        except Exception:
+            game = Game.query.filter_by(id=game_id).with_for_update().first()
+            if not game or game.result != "ongoing":
+                return False
+
+            try:
+                board = chess.Board(game.fen)
+            except Exception:
+                return False
+
+            to_move_id = game.white_id if board.turn == chess.WHITE else game.black_id
+            bot = Player.query.get(to_move_id)
+            if not bot or bot.title != "BOT" or bot.banned:
+                return False
+
+            cfg = BotConfig.query.get(bot.id)
+            bot_key = (cfg.bot_key if cfg and cfg.bot_key else "random_capture")
+            bot_engine = get_engine(bot_key) or get_engine("random_capture")
+
             move = None
+            if bot_engine:
+                try:
+                    move = bot_engine.choose_move(board.copy())
+                except Exception:
+                    move = None
 
-    if move not in board.legal_moves:
-        legal = list(board.legal_moves)
-        if not legal:
+            if move not in board.legal_moves:
+                legal = list(board.legal_moves)
+                if not legal:
+                    return False
+                captures = [m for m in legal if board.is_capture(m)]
+                move = random.choice(captures or legal)
+            uci = move.uci()
+
+            now = datetime.utcnow()
+            if game.last_clock_update:
+                elapsed = int((now - game.last_clock_update).total_seconds() * 1000)
+                if to_move_id == game.white_id:
+                    game.white_clock_ms = max(0, game.white_clock_ms - elapsed) + game.increment_ms
+                else:
+                    game.black_clock_ms = max(0, game.black_clock_ms - elapsed) + game.increment_ms
+            else:
+                game.last_clock_update = now
+
+            board.push(move)
+            game.fen = board.fen()
+            moves = game.pgn_moves.split() if game.pgn_moves else []
+            moves.append(uci)
+            game.pgn_moves = " ".join(moves)
+
+            game.clock_running_for = "black" if to_move_id == game.white_id else "white"
+            game.last_clock_update = now
+
+            result = None
+            if board.is_checkmate():
+                result = "white" if to_move_id == game.white_id else "black"
+            elif board.is_stalemate() or board.is_insufficient_material() or board.is_seventyfive_moves():
+                result = "draw"
+            elif game.white_clock_ms <= 0:
+                result = "black"
+            elif game.black_clock_ms <= 0:
+                result = "white"
+
+            if result:
+                game.result = result
+                game.ended_at = now
+                db.session.commit()
+                engine.submit_result(game_id, result)
+            else:
+                db.session.commit()
+
+            return True
+        except Exception as e:
+            db.session.rollback()
+            print(f"[bot] move error for game {game_id}: {e}", flush=True)
             return False
-        captures = [m for m in legal if board.is_capture(m)]
-        move = random.choice(captures or legal)
-    uci = move.uci()
-
-    now = datetime.utcnow()
-    if game.last_clock_update:
-        elapsed = int((now - game.last_clock_update).total_seconds() * 1000)
-        if to_move_id == game.white_id:
-            game.white_clock_ms = max(0, game.white_clock_ms - elapsed) + game.increment_ms
-        else:
-            game.black_clock_ms = max(0, game.black_clock_ms - elapsed) + game.increment_ms
-    else:
-        game.last_clock_update = now
-
-    board.push(move)
-    game.fen = board.fen()
-    moves = game.pgn_moves.split() if game.pgn_moves else []
-    moves.append(uci)
-    game.pgn_moves = " ".join(moves)
-
-    game.clock_running_for = "black" if to_move_id == game.white_id else "white"
-    game.last_clock_update = now
-
-    result = None
-    if board.is_checkmate():
-        result = "white" if to_move_id == game.white_id else "black"
-    elif board.is_stalemate() or board.is_insufficient_material() or board.is_seventyfive_moves():
-        result = "draw"
-    elif game.white_clock_ms <= 0:
-        result = "black"
-    elif game.black_clock_ms <= 0:
-        result = "white"
-
-    if result:
-        game.result = result
-        game.ended_at = now
-        db.session.commit()
-        engine.submit_result(game_id, result)
-    else:
-        db.session.commit()
-
-    return True
 
 
 @app.route("/api/games/<int:game_id>/resign", methods=["POST"])
@@ -833,6 +890,13 @@ def profile_id_page(player_id):
         .limit(200)
         .all()
     )
+    tournament_rank_cache = {}
+
+    def _get_cached_tournament_rank_map(tournament_id):
+        if tournament_id not in tournament_rank_cache:
+            tournament_rank_cache[tournament_id] = _tournament_rank_map(tournament_id)
+        return tournament_rank_cache[tournament_id]
+
     enriched = []
     for g in raw_games:
         as_white = g.white_id == player.id
@@ -843,7 +907,10 @@ def profile_id_page(player_id):
             .filter(Player.rating > opp.rating)
             .count() + 1
         )
-        enriched.append((g, as_white, opp, opp_rating, opp_rank))
+        opp_tournament_rank = None
+        if g.tournament_id:
+            opp_tournament_rank = _get_cached_tournament_rank_map(g.tournament_id).get(opp.id)
+        enriched.append((g, as_white, opp, opp_rating, opp_rank, opp_tournament_rank))
 
     return render_template(
         "profile.html",

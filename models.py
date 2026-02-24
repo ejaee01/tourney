@@ -206,6 +206,7 @@ class Game(db.Model):
         )
         return {
             "id": self.id,
+            "tournament_id": self.tournament_id,
             "white": self.white.username,
             "white_id": self.white_id,
             "white_title": self.white.title,

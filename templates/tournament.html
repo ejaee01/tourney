@@ -171,14 +171,31 @@
   async function loadGames() {
     const games = await api(`/api/tournaments/${TOURNAMENT_ID}/games`);
     const tbody = document.getElementById('games-list');
+    function fmtGamePlayer(name, title, rating, tournamentRank, globalRank) {
+      const titlePart = title ? ` (${title})` : '';
+      const ratingPart = (rating === null || rating === undefined) ? '' : ` (${rating})`;
+      const rank = tournamentRank || globalRank;
+      const rankPart = rank ? ` (#${rank})` : '';
+      return `${name}${titlePart}${ratingPart}${rankPart}`;
+    }
     tbody.innerHTML = games.slice(0, 15).map(g => {
-      const wt = g.white_title ? `<span style="color:${TITLE_COLORS[g.white_title]||'#333'};font-weight:bold;font-size:0.78rem;margin-right:2px;">${g.white_title}</span>` : '';
-      const bt = g.black_title ? `<span style="color:${TITLE_COLORS[g.black_title]||'#333'};font-weight:bold;font-size:0.78rem;margin-right:2px;">${g.black_title}</span>` : '';
-      const winfo = `${g.white} (${g.white_rating}${g.white_rank?` #${g.white_rank}`:''})`;
-      const binfo = `${g.black} (${g.black_rating}${g.black_rank?` #${g.black_rank}`:''})`;
+      const winfo = fmtGamePlayer(
+        g.white,
+        g.white_title,
+        g.white_rating,
+        g.white_tournament_rank,
+        g.white_rank,
+      );
+      const binfo = fmtGamePlayer(
+        g.black,
+        g.black_title,
+        g.black_rating,
+        g.black_tournament_rank,
+        g.black_rank,
+      );
       return `<tr style="cursor:pointer;" onclick="window.location='/game/${g.id}'">
-        <td>${wt}${winfo}${g.white_berserk ? ' ⚡' : ''}</td>
-        <td>${bt}${binfo}${g.black_berserk ? ' ⚡' : ''}</td>
+        <td>${winfo}${g.white_berserk ? ' ⚡' : ''}</td>
+        <td>${binfo}${g.black_berserk ? ' ⚡' : ''}</td>
         <td><span class="badge ${g.result}">${g.result}</span></td>
       </tr>`;
     }).join('');

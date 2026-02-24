@@ -129,7 +129,7 @@
         </tr>
       </thead>
       <tbody>
-	        {% for g, as_white, opp, opp_rating, opp_rank in recent_games %}
+	        {% for g, as_white, opp, opp_rating, opp_rank, opp_tournament_rank in recent_games %}
 	        {% set opp_name = opp.username %}
         {% if g.result == 'draw' %}
           {% set me_result = 'Draw' %}
@@ -147,9 +147,9 @@
         <tr style="cursor:pointer;" onclick="window.location='/game/{{ g.id }}'">
 	          <td style="color:#777;">{{ g.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
 	          <td>{{ 'White' if as_white else 'Black' }}</td>
-	          <td>
+          <td>
             <a href="/profile/{{ opp.id }}" onclick="event.stopPropagation()">
-              {{ opp_name }} ({{ opp_rating }}{% if opp_rank %} #{{ opp_rank }}{% endif %})
+              {{ opp_name }}{% if opp.title %} ({{ opp.title }}){% endif %} ({{ opp_rating }}){% if opp_tournament_rank %} (#{{ opp_tournament_rank }}){% elif opp_rank %} (#{{ opp_rank }}){% endif %}
             </a>
           </td>
 	          <td class="{{ res_class }}">{{ me_result }}</td>

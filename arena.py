@@ -191,6 +191,7 @@ class ArenaEngine:
         base_ms, inc_ms = tournament._parse_time_control()
 
         for tp_white, tp_black in pairs:
+            now = datetime.utcnow()
             game = Game(
                 tournament_id=tournament.id,
                 white_id=tp_white.player_id,
@@ -199,6 +200,7 @@ class ArenaEngine:
                 white_clock_ms=base_ms,
                 black_clock_ms=base_ms,
                 increment_ms=inc_ms,
+                last_clock_update=now,
             )
             db.session.add(game)
 
