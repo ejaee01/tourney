@@ -85,12 +85,12 @@
   <div class="side-col">
     <div id="status">Waiting for game data…</div>
 
-    <div class="card">
-      <button id="resign-btn" onclick="resign()">Resign</button>
-      <button class="berserk-btn" id="berserk-btn" onclick="berserk()">⚡ Berserk</button>
-      <button class="secondary" onclick="claimTime()">Claim on time</button>
-      <button class="secondary" id="return-btn" onclick="window.history.back()">← Back</button>
-    </div>
+	    <div class="card">
+	      <button id="resign-btn" onclick="resign()">Resign</button>
+	      <button class="berserk-btn" id="berserk-btn" onclick="berserk()">⚡ Berserk</button>
+	      <button class="secondary" id="claim-btn" onclick="claimTime()">Claim on time</button>
+	      <button class="secondary" id="return-btn" onclick="window.history.back()">← Back</button>
+	    </div>
 
     <div class="card">
       <div style="font-size:0.8rem;color:#777;margin-bottom:6px;">Move list</div>
@@ -108,9 +108,10 @@
 <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
-<script>
-  const GAME_ID = {{ game_id }};
-  const MY_ID   = {{ my_id }};
+	<script>
+	  const GAME_ID = {{ game_id }};
+	  const MY_ID   = {{ my_id }};
+	  const SPECTATOR = {{ 'true' if spectator else 'false' }};
 
   let game = new Chess();
   let board = null;
@@ -162,7 +163,7 @@
     oppEl.className = 'clock' + (oppClock < 10000 ? ' low' : '');
   }
 
-  function applyState(data) {
+	  function applyState(data) {
     whiteClockMs   = data.white_clock_ms;
     blackClockMs   = data.black_clock_ms;
     clockRunningFor = data.clock_running_for;
@@ -178,29 +179,39 @@
     document.getElementById('my-bar').className    = 'player-bar' + ((myIsWhite && data.clock_running_for==='white') || (!myIsWhite && data.clock_running_for==='black') ? ' active' : '');
     document.getElementById('opponent-bar').className = 'player-bar' + ((myIsWhite && data.clock_running_for==='black') || (!myIsWhite && data.clock_running_for==='white') ? ' active' : '');
 
-    const statusEl = document.getElementById('status');
-    if (data.result !== 'ongoing') {
-      gameOver = true;
-      stopIntervals();
-      board.draggable = false;
-      document.getElementById('resign-btn').disabled = true;
-      document.getElementById('berserk-btn').disabled = true;
-      document.getElementById('return-btn').style.display = 'block';
+	    const statusEl = document.getElementById('status');
+	    if (data.result !== 'ongoing') {
+	      gameOver = true;
+	      stopIntervals();
+	      board.draggable = false;
+	      document.getElementById('resign-btn').disabled = true;
+	      document.getElementById('berserk-btn').disabled = true;
+	      document.getElementById('claim-btn').disabled = true;
+	      document.getElementById('return-btn').style.display = 'block';
 
-      if (data.result === 'draw') {
-        statusEl.textContent = 'Draw!'; statusEl.className = 'draw';
-      } else {
-        const iWon = (data.result === 'white' && myColor === 'white') ||
-                     (data.result === 'black' && myColor === 'black');
-        statusEl.textContent = iWon ? '🏆 You won!' : 'You lost.';
-        statusEl.className   = iWon ? 'won' : 'lost';
-      }
-    } else {
-      const myTurn = (game.turn() === 'w' && myColor === 'white') ||
-                     (game.turn() === 'b' && myColor === 'black');
-      statusEl.textContent = myTurn ? 'Your turn' : "Opponent's turn";
-      statusEl.className   = '';
-    }
+	      if (data.result === 'draw') {
+	        statusEl.textContent = 'Draw!'; statusEl.className = 'draw';
+	      } else {
+	        if (SPECTATOR) {
+	          statusEl.textContent = `Game over: ${data.result === 'white' ? 'White' : 'Black'} wins.`;
+	          statusEl.className = '';
+	        } else {
+	          const iWon = (data.result === 'white' && myColor === 'white') ||
+	                       (data.result === 'black' && myColor === 'black');
+	          statusEl.textContent = iWon ? '🏆 You won!' : 'You lost.';
+	          statusEl.className   = iWon ? 'won' : 'lost';
+	        }
+	      }
+	    } else {
+	      if (SPECTATOR) {
+	        statusEl.textContent = game.turn() === 'w' ? 'White to move' : 'Black to move';
+	      } else {
+	        const myTurn = (game.turn() === 'w' && myColor === 'white') ||
+	                       (game.turn() === 'b' && myColor === 'black');
+	        statusEl.textContent = myTurn ? 'Your turn' : "Opponent's turn";
+	      }
+	      statusEl.className   = '';
+	    }
 
     renderClocks();
   }
@@ -243,17 +254,19 @@
     }
   }
 
-  function onDragStart(source, piece) {
-    if (gameOver) return false;
-    if ((myColor === 'white' && piece.startsWith('b')) ||
-        (myColor === 'black' && piece.startsWith('w'))) return false;
-    if ((game.turn() === 'w') !== (myColor === 'white')) return false;
-    return true;
-  }
+	  function onDragStart(source, piece) {
+	    if (SPECTATOR) return false;
+	    if (gameOver) return false;
+	    if ((myColor === 'white' && piece.startsWith('b')) ||
+	        (myColor === 'black' && piece.startsWith('w'))) return false;
+	    if ((game.turn() === 'w') !== (myColor === 'white')) return false;
+	    return true;
+	  }
 
-  async function onDrop(source, target) {
-    const promotion = 'q';
-    const fullUci = source + target + (isPromotion(source, target) ? promotion : '');
+	  async function onDrop(source, target) {
+	    if (SPECTATOR) return 'snapback';
+	    const promotion = 'q';
+	    const fullUci = source + target + (isPromotion(source, target) ? promotion : '');
 
     const data = await api(`/api/games/${GAME_ID}/move`, 'POST', { move: fullUci });
     if (data.error) {
@@ -290,20 +303,26 @@
     else alert(data.message);
   }
 
-  async function init() {
-    const data = await api(`/api/games/${GAME_ID}`);
-    myColor = data.white_id === MY_ID ? 'white' : 'black';
+	  async function init() {
+	    const data = await api(`/api/games/${GAME_ID}`);
+	    myColor = (!SPECTATOR && data.white_id === MY_ID) ? 'white' : 'black';
+	    if (SPECTATOR) {
+	      myColor = 'white';
+	      document.getElementById('resign-btn').style.display = 'none';
+	      document.getElementById('berserk-btn').style.display = 'none';
+	      document.getElementById('claim-btn').style.display = 'none';
+	    }
 
-    document.getElementById('my-name').textContent       = myColor === 'white' ? data.white : data.black;
-    document.getElementById('opponent-name').textContent = myColor === 'white' ? data.black : data.white;
-    document.getElementById('tc-label').textContent      = `+${data.increment_ms/1000}s increment`;
+	    document.getElementById('my-name').textContent       = myColor === 'white' ? data.white : data.black;
+	    document.getElementById('opponent-name').textContent = myColor === 'white' ? data.black : data.white;
+	    document.getElementById('tc-label').textContent      = `+${data.increment_ms/1000}s increment`;
 
-    board = Chessboard('board', {
-      draggable: true,
-      position: data.fen,
-      orientation: myColor,
-      onDragStart,
-      onDrop,
+	    board = Chessboard('board', {
+	      draggable: !SPECTATOR,
+	      position: data.fen,
+	      orientation: myColor,
+	      onDragStart,
+	      onDrop,
       onSnapEnd,
       pieceTheme: function(piece) {
         return `https://lichess1.org/assets/piece/cburnett/${piece}.svg`;

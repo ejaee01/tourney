@@ -150,23 +150,23 @@
     endsAt = t.ends_at ? new Date(t.ends_at + 'Z') : null;
   }
 
-  async function loadLeaderboard() {
-    const board = await api(`/api/tournaments/${TOURNAMENT_ID}/leaderboard`);
-    const tbody = document.getElementById('leaderboard');
-    tbody.innerHTML = board.map(p => {
-      const tc = p.title ? `<span style="color:${TITLE_COLORS[p.title]||'#333'};font-weight:bold;font-size:0.78rem;margin-right:3px;">${p.title}</span>` : '';
-      return `<tr>
-        <td class="rank">${p.rank}</td>
-        <td>${tc}${p.username}${p.provisional ? ' <sup style="color:#999;font-size:0.7rem">?</sup>' : ''}</td>
-        <td>${p.rating}</td>
-        <td style="font-weight:bold;">${p.score}</td>
-        <td>${p.games_played}</td>
-        <td style="color:#777;">${p.wins}/${p.draws}/${p.losses}</td>
-        <td class="streak">${p.win_streak > 0 ? '🔥'.repeat(Math.min(p.win_streak, 5)) : ''}</td>
-        <td class="perf">${p.performance_rating || '—'}</td>
-      </tr>`;
-    }).join('');
-  }
+	  async function loadLeaderboard() {
+	    const board = await api(`/api/tournaments/${TOURNAMENT_ID}/leaderboard`);
+	    const tbody = document.getElementById('leaderboard');
+	    tbody.innerHTML = board.map(p => {
+	      const tc = p.title ? `<span style="color:${TITLE_COLORS[p.title]||'#333'};font-weight:bold;font-size:0.78rem;margin-right:3px;">${p.title}</span>` : '';
+	      return `<tr>
+	        <td class="rank">${p.rank}</td>
+	        <td>${tc}<a href="/profile/${p.player_id}">${p.username}</a>${p.provisional ? ' <sup style="color:#999;font-size:0.7rem">?</sup>' : ''}</td>
+	        <td>${p.rating}</td>
+	        <td style="font-weight:bold;">${p.score}</td>
+	        <td>${p.games_played}</td>
+	        <td style="color:#777;">${p.wins}/${p.draws}/${p.losses}</td>
+	        <td class="streak">${p.win_streak > 0 ? '🔥'.repeat(Math.min(p.win_streak, 5)) : ''}</td>
+	        <td class="perf">${p.performance_rating || '—'}</td>
+	      </tr>`;
+	    }).join('');
+	  }
 
   async function loadGames() {
     const games = await api(`/api/tournaments/${TOURNAMENT_ID}/games`);

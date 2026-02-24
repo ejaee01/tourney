@@ -214,6 +214,41 @@ def get_player(player_id):
     return jsonify(Player.query.get_or_404(player_id).to_dict())
 
 
+@app.route("/api/players/<int:player_id>/rating-history")
+def player_rating_history(player_id):
+    days = request.args.get("days", 90, type=int) or 90
+    days = max(1, min(days, 365))
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=days)
+
+    player = Player.query.get_or_404(player_id)
+
+    rows = (
+        RatingHistory.query
+        .filter(
+            RatingHistory.player_id == player.id,
+            RatingHistory.recorded_at >= cutoff,
+        )
+        .order_by(RatingHistory.recorded_at.asc())
+        .all()
+    )
+
+    points = [
+        {
+            "timestamp": row.recorded_at.isoformat(),
+            "rating": round(row.rating),
+        }
+        for row in rows
+    ]
+
+    if not points:
+        points.append({"timestamp": now.isoformat(), "rating": round(player.rating)})
+    elif points[-1]["rating"] != round(player.rating):
+        points.append({"timestamp": now.isoformat(), "rating": round(player.rating)})
+
+    return jsonify(points)
+
+
 @app.route("/api/me")
 @login_required
 def me():
@@ -477,41 +512,48 @@ def tournament_page(tournament_id):
 
 
 @app.route("/game/<int:game_id>")
-@login_required
 def game_page(game_id):
     game = Game.query.get_or_404(game_id)
-    return render_template("game.html", game_id=game_id,
-                           my_id=current_user.id,
-                           my_username=current_user.username)
+    is_player = (
+        current_user.is_authenticated and current_user.id in (game.white_id, game.black_id)
+    )
+    return render_template(
+        "game.html",
+        game_id=game_id,
+        my_id=current_user.id if is_player else -1,
+        my_username=current_user.username if is_player else "",
+        spectator=not is_player,
+    )
 
 
 @app.route("/profile")
 @login_required
 def profile_page():
-    performance_last_3 = _performance_last_3_tournaments(current_user.id)
+    return redirect(url_for("profile_id_page", player_id=current_user.id))
 
-    tournaments = (
-        db.session.query(TournamentPlayer, Tournament)
-        .join(Tournament, TournamentPlayer.tournament_id == Tournament.id)
-        .filter(TournamentPlayer.player_id == current_user.id)
-        .order_by(Tournament.created_at.desc())
-        .all()
-    )
 
-    recent_games = (
-        Game.query.filter(
-            db.or_(Game.white_id == current_user.id, Game.black_id == current_user.id)
-        )
-        .order_by(Game.started_at.desc())
-        .limit(200)
-        .all()
-    )
+@app.route("/profile/<int:player_id>")
+def profile_id_page(player_id):
+    player = Player.query.get_or_404(player_id)
+    performance_last_3 = _performance_last_3_tournaments(player.id)
 
     return render_template(
         "profile.html",
+        player=player,
         performance_last_3=performance_last_3,
-        tournaments=tournaments,
-        recent_games=recent_games,
+        tournaments=(
+            db.session.query(TournamentPlayer, Tournament)
+            .join(Tournament, TournamentPlayer.tournament_id == Tournament.id)
+            .filter(TournamentPlayer.player_id == player.id)
+            .order_by(Tournament.created_at.desc())
+            .all()
+        ),
+        recent_games=(
+            Game.query.filter(db.or_(Game.white_id == player.id, Game.black_id == player.id))
+            .order_by(Game.started_at.desc())
+            .limit(200)
+            .all()
+        ),
     )
 
 

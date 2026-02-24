@@ -118,7 +118,7 @@
           <td><span class="perf-highlight" id="perf-last-3">—</span></td>
         </tr>
       </table>
-      <a class="profile-btn" href="/profile">View Full Profile →</a>
+      <a class="profile-btn" href="/profile/{{ current_user.id }}">View Full Profile →</a>
     </div>
     {% endif %}
 
@@ -224,7 +224,7 @@
       const tc = p.title ? `<span style="color:${TITLE_COLORS[p.title]||'#333'};font-weight:bold;font-size:0.8rem;margin-right:3px;">${p.title}</span>` : '';
       return `<tr>
         <td>${i+1}</td>
-        <td>${tc}${p.username}${p.provisional?' <sup style="color:#999">?</sup>':''}</td>
+        <td>${tc}<a href="/profile/${p.id}">${p.username}</a>${p.provisional?' <sup style="color:#999">?</sup>':''}</td>
         <td style="font-weight:bold;">${p.rating}</td>
         <td style="color:#777">${p.games_played}</td>
       </tr>`;
@@ -241,6 +241,14 @@
       document.getElementById('game-link').href = `/game/${me.active_game_id}`;
     }
     {% endif %}
+  }
+
+  function fmtDate(ts) {
+    if (!ts || typeof ts !== 'string') return '—';
+    const iso = ts.endsWith('Z') || /[+-]\\d{2}:\\d{2}$/.test(ts) ? ts : (ts + 'Z');
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function drawLineChart(container, points) {
@@ -294,9 +302,9 @@
         <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="#759900" />
       </svg>
       <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#aaa;margin-top:3px;">
-        <span>${minR}</span>
+        <span>${fmtDate(points[0].timestamp)}</span>
         <span style="color:#759900;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
-        <span>${maxR}</span>
+        <span>${fmtDate(points[points.length-1].timestamp)}</span>
       </div>`;
   }
 

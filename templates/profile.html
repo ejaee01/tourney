@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{ current_user.username }} – Profile</title>
+	  <title>{{ player.username }} – Profile</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #f5f3ef; color: #333; font-family: 'Segoe UI', Noto Sans, sans-serif; }
@@ -38,32 +38,32 @@
   </style>
 </head>
 <body>
-<header>
-  <a href="/">← Home</a>
-  <h1>
-    {% if current_user.title %}
-      <span class="title-tag" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(current_user.title,'#333') }}">{{ current_user.title }}</span>
-    {% endif %}
-    {{ current_user.username }}'s Profile
-  </h1>
-</header>
+	<header>
+	  <a href="/">← Home</a>
+	  <h1>
+	    {% if player.title %}
+	      <span class="title-tag" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(player.title,'#333') }}">{{ player.title }}</span>
+	    {% endif %}
+	    {{ player.username }}'s Profile
+	  </h1>
+	</header>
 
 <div class="container">
   <div class="grid">
     <div class="card">
       <h2>Rating &amp; Stats</h2>
-      <div class="metric">
-        <span>Elo Rating</span>
-        <span class="value" style="font-size:1.2rem;">{{ current_user.rating | int }}</span>
-      </div>
-      <div class="metric">
-        <span>Rating Deviation (RD)</span>
-        <span class="value">{{ '%.1f' | format(current_user.rd) }}</span>
-      </div>
-      <div class="metric">
-        <span>Games Played</span>
-        <span class="value">{{ current_user.games_played }}</span>
-      </div>
+	      <div class="metric">
+	        <span>Elo Rating</span>
+	        <span class="value" style="font-size:1.2rem;">{{ player.rating | int }}</span>
+	      </div>
+	      <div class="metric">
+	        <span>Rating Deviation (RD)</span>
+	        <span class="value">{{ '%.1f' | format(player.rd) }}</span>
+	      </div>
+	      <div class="metric">
+	        <span>Games Played</span>
+	        <span class="value">{{ player.games_played }}</span>
+	      </div>
       <div class="metric">
         <span>Performance (last 3 tournaments)</span>
         <span class="value blue">{{ performance_last_3 if performance_last_3 is not none else '—' }}</span>
@@ -129,9 +129,9 @@
         </tr>
       </thead>
       <tbody>
-        {% for g in recent_games %}
-        {% set as_white = g.white_id == current_user.id %}
-        {% set opp_name = g.black.username if as_white else g.white.username %}
+	        {% for g in recent_games %}
+	        {% set as_white = g.white_id == player.id %}
+	        {% set opp_name = g.black.username if as_white else g.white.username %}
         {% if g.result == 'draw' %}
           {% set me_result = 'Draw' %}
           {% set res_class = 'draw' %}
@@ -146,10 +146,10 @@
           {% set res_class = 'loss' %}
         {% endif %}
         <tr style="cursor:pointer;" onclick="window.location='/game/{{ g.id }}'">
-          <td style="color:#777;">{{ g.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
-          <td>{{ 'White' if as_white else 'Black' }}</td>
-          <td>{{ opp_name }}</td>
-          <td class="{{ res_class }}">{{ me_result }}</td>
+	          <td style="color:#777;">{{ g.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+	          <td>{{ 'White' if as_white else 'Black' }}</td>
+	          <td><a href="/profile/{{ g.black_id if as_white else g.white_id }}" onclick="event.stopPropagation()">{{ opp_name }}</a></td>
+	          <td class="{{ res_class }}">{{ me_result }}</td>
           <td><a href="/tournament/{{ g.tournament_id }}" onclick="event.stopPropagation()">#{{ g.tournament_id }}</a></td>
           <td><a href="/game/{{ g.id }}" onclick="event.stopPropagation()">Open →</a></td>
         </tr>
@@ -163,6 +163,15 @@
 </div>
 
 <script>
+  const PLAYER_ID = {{ player.id }};
+  function fmtDate(ts) {
+    if (!ts || typeof ts !== 'string') return '—';
+    const iso = ts.endsWith('Z') || /[+-]\\d{2}:\\d{2}$/.test(ts) ? ts : (ts + 'Z');
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
   function drawLineChart(container, points) {
     if (!container) return;
     if (!points || !points.length) {
@@ -216,9 +225,9 @@
         <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="#759900" />
       </svg>
       <div style="display:flex;justify-content:space-between;font-size:0.76rem;color:#aaa;margin-top:4px;">
-        <span>Min: ${minR}</span>
+        <span>${fmtDate(points[0].timestamp)}</span>
         <span style="color:#759900;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
-        <span>Max: ${maxR}</span>
+        <span>${fmtDate(points[points.length-1].timestamp)}</span>
       </div>
     `;
   }
@@ -226,7 +235,7 @@
   let ratingPointsCache = null;
   async function loadChart(force=false) {
     if (force || !ratingPointsCache) {
-      const res = await fetch('/api/me/rating-history?days=90', { credentials: 'same-origin' });
+      const res = await fetch(`/api/players/${PLAYER_ID}/rating-history?days=90`, { credentials: 'same-origin' });
       ratingPointsCache = await res.json();
     }
     drawLineChart(document.getElementById('rating-chart'), ratingPointsCache);
