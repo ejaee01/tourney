@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import json
 import random
 import secrets
 import chess
@@ -17,8 +18,10 @@ from models import (
     TITLES,
     Presence,
     CasualQueue,
+    BotConfig,
 )
 from arena import ArenaEngine
+from bots.registry import get_engine, list_engines
 
 app = Flask(__name__)
 import os
@@ -287,6 +290,11 @@ def list_bots():
             for b in bots
         ]
     )
+
+
+@app.route("/api/bot-engines")
+def bot_engines():
+    return jsonify(list_engines())
 
 
 def _cleanup_casual_queue(now):
@@ -660,11 +668,23 @@ def _maybe_play_bot_move(game_id):
     if not bot or bot.title != "BOT" or bot.banned:
         return False
 
-    legal = list(board.legal_moves)
-    if not legal:
-        return False
-    captures = [m for m in legal if board.is_capture(m)]
-    move = random.choice(captures or legal)
+    cfg = BotConfig.query.get(bot.id)
+    bot_key = (cfg.bot_key if cfg and cfg.bot_key else "random_capture")
+    bot_engine = get_engine(bot_key) or get_engine("random_capture")
+
+    move = None
+    if bot_engine:
+        try:
+            move = bot_engine.choose_move(board.copy())
+        except Exception:
+            move = None
+
+    if move not in board.legal_moves:
+        legal = list(board.legal_moves)
+        if not legal:
+            return False
+        captures = [m for m in legal if board.is_capture(m)]
+        move = random.choice(captures or legal)
     uci = move.uci()
 
     now = datetime.utcnow()
@@ -838,7 +858,14 @@ def admin_page():
     if not current_user.is_admin:
         return redirect(url_for("index"))
     players = Player.query.order_by(Player.username.asc()).all()
-    return render_template("admin.html", players=players, titles=TITLES)
+    bot_configs = {c.player_id: c.bot_key for c in BotConfig.query.all()}
+    return render_template(
+        "admin.html",
+        players=players,
+        titles=TITLES,
+        bot_engines=list_engines(),
+        bot_configs=bot_configs,
+    )
 
 
 @app.route("/api/admin/ban/<int:player_id>", methods=["POST"])
@@ -902,12 +929,16 @@ def admin_create_bot():
 
     data = request.get_json() or {}
     username = (data.get("username") or "").strip()
+    bot_key = (data.get("bot_key") or "random_capture").strip()
+    bot_config = data.get("config")
     if not username:
         return jsonify({"error": "username required"}), 400
     if len(username) > 64:
         return jsonify({"error": "username too long"}), 400
     if Player.query.filter_by(username=username).first():
         return jsonify({"error": "username already taken"}), 400
+    if not get_engine(bot_key):
+        return jsonify({"error": "unknown bot engine"}), 400
 
     rating = data.get("rating", 500)
     try:
@@ -920,9 +951,42 @@ def admin_create_bot():
     bot.set_password(secrets.token_urlsafe(24))
     db.session.add(bot)
     db.session.flush()
+    cfg_json = None
+    if bot_config is not None:
+        try:
+            cfg_json = json.dumps(bot_config)
+        except Exception:
+            return jsonify({"error": "config must be valid JSON"}), 400
+    db.session.add(BotConfig(player_id=bot.id, bot_key=bot_key, config_json=cfg_json))
     db.session.add(RatingHistory(player_id=bot.id, rating=bot.rating, rd=bot.rd))
     db.session.commit()
     return jsonify({"ok": True, "bot": bot.to_dict()})
+
+
+@app.route("/api/admin/set-bot-engine/<int:player_id>", methods=["POST"])
+@login_required
+def admin_set_bot_engine(player_id):
+    if not current_user.is_admin:
+        return jsonify({"error": "forbidden"}), 403
+
+    p = Player.query.get_or_404(player_id)
+    if p.title != "BOT":
+        return jsonify({"error": "player is not a bot"}), 400
+
+    data = request.get_json() or {}
+    bot_key = (data.get("bot_key") or "").strip()
+    if not bot_key:
+        return jsonify({"error": "bot_key required"}), 400
+    if not get_engine(bot_key):
+        return jsonify({"error": "unknown bot engine"}), 400
+
+    cfg = BotConfig.query.get(p.id)
+    if cfg:
+        cfg.bot_key = bot_key
+    else:
+        db.session.add(BotConfig(player_id=p.id, bot_key=bot_key))
+    db.session.commit()
+    return jsonify({"ok": True, "bot_key": bot_key})
 
 
 @app.route("/api/admin/reset-ratings", methods=["POST"])

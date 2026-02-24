@@ -74,6 +74,14 @@
 	        <div style="font-size:0.82rem;color:#555;font-weight:600;margin-bottom:4px;">Starting rating</div>
 	        <input id="bot-rating" class="num" type="number" value="500" min="100" max="3000" />
 	      </div>
+	      <div>
+	        <div style="font-size:0.82rem;color:#555;font-weight:600;margin-bottom:4px;">Engine</div>
+	        <select id="bot-engine" class="title-sel">
+	          {% for e in bot_engines %}
+	          <option value="{{ e.key }}">{{ e.name }}</option>
+	          {% endfor %}
+	        </select>
+	      </div>
 	      <button class="btn btn-blue" onclick="createBot()">Create Bot</button>
 	      <span id="bot-msg" style="font-size:0.85rem;"></span>
 	    </div>
@@ -117,6 +125,16 @@
               {% endfor %}
             </select>
             <button class="btn btn-blue" style="margin-top:4px;" onclick="setTitle({{ p.id }})">Set</button>
+            {% if p.title == 'BOT' %}
+            <div style="margin-top:8px;">
+              <select class="title-sel" id="bot-engine-{{ p.id }}">
+                {% for e in bot_engines %}
+                <option value="{{ e.key }}" {% if (bot_configs.get(p.id) or 'random_capture') == e.key %}selected{% endif %}>{{ e.name }}</option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-blue" style="margin-top:4px;" onclick="setBotEngine({{ p.id }})">Set Engine</button>
+            </div>
+            {% endif %}
           </td>
           <td>{{ p.rating | int }}</td>
           <td>{{ p.games_played }}</td>
@@ -252,7 +270,8 @@
 	    msg.textContent = 'Creating…';
 	    const username = (document.getElementById('bot-name').value || '').trim();
 	    const rating = +document.getElementById('bot-rating').value || 500;
-	    const res = await api('/api/admin/create-bot', { username, rating });
+	    const bot_key = (document.getElementById('bot-engine').value || 'random_capture').trim();
+	    const res = await api('/api/admin/create-bot', { username, rating, bot_key });
 	    if (res.ok) {
 	      msg.style.color = '#388e3c';
 	      msg.textContent = `Created ${res.bot.username} (#${res.bot.id})`;
@@ -260,6 +279,15 @@
 	    } else {
 	      msg.style.color = '#c62828';
 	      msg.textContent = res.error || 'Error';
+	    }
+	  }
+
+	  async function setBotEngine(id) {
+	    const sel = document.getElementById(`bot-engine-${id}`);
+	    const bot_key = (sel.value || '').trim();
+	    const res = await api(`/api/admin/set-bot-engine/${id}`, { bot_key });
+	    if (!res.ok) {
+	      alert(res.error || 'Error');
 	    }
 	  }
 

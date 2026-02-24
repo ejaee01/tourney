@@ -230,6 +230,16 @@ class RatingHistory(db.Model):
     tournament = db.relationship("Tournament")
 
 
+class BotConfig(db.Model):
+    __tablename__ = "bot_configs"
+
+    player_id = db.Column(db.Integer, db.ForeignKey("players.id"), primary_key=True)
+    bot_key = db.Column(db.String(64), nullable=False, default="random_capture", index=True)
+    config_json = db.Column(db.Text, nullable=True)
+
+    player = db.relationship("Player")
+
+
 class Presence(db.Model):
     __tablename__ = "presence"
 
