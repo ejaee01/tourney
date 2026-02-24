@@ -80,6 +80,9 @@
       <div id="board" style="width:480px"></div>
       <div id="my-bar" class="player-bar">
         <span id="my-title" style="font-weight:bold;font-size:0.78rem;margin-right:3px;"></span>
+        <span id="my-name" class="player-name">—</span>
+        <span id="my-rating" class="player-rating" style="margin-left:8px;color:#555;">—</span>
+        <span id="my-clock" class="clock">—:——</span>
     </div>
   </div>
 
@@ -127,11 +130,36 @@
   let clockInterval = null;
   let pingInterval = null;
 
+  function setLoadingError(message) {
+    const statusEl = document.getElementById('status');
+    statusEl.textContent = message;
+    statusEl.className = '';
+  }
+
+  function rankLabel(value) {
+    return (value === null || value === undefined) ? '?' : value;
+  }
+
+  function ratingWithRank(rating, rank) {
+    if (rating === null || rating === undefined) return '—';
+    return `${rating} (${rankLabel(rank)})`;
+  }
+
   async function api(url, method='GET', body=null) {
     const opts = { method, headers: {'Content-Type':'application/json'}, credentials:'same-origin' };
     if (body) opts.body = JSON.stringify(body);
     const r = await fetch(url, opts);
-    return r.json();
+    let data = null;
+    try {
+      data = await r.json();
+    } catch (e) {
+      data = null;
+    }
+    if (!r.ok) {
+      const msg = (data && (data.error || data.message)) ? (data.error || data.message) : `request failed (${r.status})`;
+      throw new Error(msg);
+    }
+    return data || {};
   }
 
   function formatClock(ms) {
@@ -220,8 +248,12 @@
 
   async function poll() {
     if (gameOver) return;
-    const data = await api(`/api/games/${GAME_ID}`);
-    applyState(data);
+    try {
+      const data = await api(`/api/games/${GAME_ID}`);
+      applyState(data);
+    } catch (e) {
+      setLoadingError(`Connection issue: ${e.message}`);
+    }
   }
 
   function stopIntervals() {
@@ -271,18 +303,23 @@
 	    const fullUci = source + target + (isPromotion(source, target) ? promotion : '');
 
     // optimistically apply move to local board for immediate visual feedback
-    const move = new chess.Move(source, target, promotion);
-    if (!game.move(move, { sloppy: true })) {
+    const move = game.move({ from: source, to: target, promotion });
+    if (!move) {
       return 'snapback';
     }
     board.position(game.fen());
 
     // now validate and save server-side
-    const data = await api(`/api/games/${GAME_ID}/move`, 'POST', { move: fullUci });
-    if (data.error) {
-      // revert on error
+    try {
+      await api(`/api/games/${GAME_ID}/move`, 'POST', { move: fullUci });
+    } catch (e) {
       game.undo();
       board.position(game.fen());
+      return 'snapback';
+    }
+    await poll();
+  }
+
   function isPromotion(from, to) {
     const piece = game.get(from);
     if (!piece || piece.type !== 'p') return false;
@@ -312,7 +349,13 @@
   }
 
 	  async function init() {
-	    const data = await api(`/api/games/${GAME_ID}`);
+      let data;
+      try {
+        data = await api(`/api/games/${GAME_ID}`);
+      } catch (e) {
+        setLoadingError(`Unable to load game: ${e.message}`);
+        return;
+      }
 	    myColor = (!SPECTATOR && data.white_id === MY_ID) ? 'white' : 'black';
 	    if (SPECTATOR) {
 	      myColor = 'white';
@@ -334,8 +377,12 @@
       document.getElementById('opponent-title').textContent = oppTitle;
       document.getElementById('opponent-title').style.color = TITLE_COLORS[oppTitle] || '#333';
     }
-    document.getElementById('my-rating').textContent      = myColor === 'white' ? `${data.white_rating} (${data.white_rank})` : `${data.black_rating} (${data.black_rank})`;
-    document.getElementById('opponent-rating').textContent = myColor === 'white' ? `${data.black_rating} (${data.black_rank})` : `${data.white_rating} (${data.white_rank})`;
+    document.getElementById('my-rating').textContent      = myColor === 'white'
+      ? ratingWithRank(data.white_rating, data.white_rank)
+      : ratingWithRank(data.black_rating, data.black_rank);
+    document.getElementById('opponent-rating').textContent = myColor === 'white'
+      ? ratingWithRank(data.black_rating, data.black_rank)
+      : ratingWithRank(data.white_rating, data.white_rank);
 	    board = Chessboard('board', {
 	      draggable: !SPECTATOR,
 	      position: data.fen,

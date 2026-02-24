@@ -194,21 +194,28 @@ class Game(db.Model):
 
     def to_dict(self):
         wc, bc = self.live_clocks()
-        # note: we intentionally avoid computing tournament rank here;
-        # the client can fetch standings separately if needed.  the previous
-        # implementation referenced an undefined `black_rank` variable which
-        # blew up on every game fetch.
+        white_rank = (
+            db.session.query(Player)
+            .filter(Player.rating > self.white.rating)
+            .count() + 1
+        )
+        black_rank = (
+            db.session.query(Player)
+            .filter(Player.rating > self.black.rating)
+            .count() + 1
+        )
         return {
             "id": self.id,
             "white": self.white.username,
             "white_id": self.white_id,
             "white_title": self.white.title,
+            "white_rating": round(self.white.rating),
+            "white_rank": white_rank,
             "black": self.black.username,
             "black_id": self.black_id,
             "black_title": self.black.title,
             "black_rating": round(self.black.rating),
-            # "black_rank" intentionally dropped until we have a reliable
-            # value to supply
+            "black_rank": black_rank,
             "result": self.result,
             "white_berserk": self.white_berserk,
             "black_berserk": self.black_berserk,
