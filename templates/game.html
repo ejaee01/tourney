@@ -72,15 +72,14 @@
 <div class="layout">
   <div class="board-col">
     <div id="opponent-bar" class="player-bar">
-      <span id="opponent-name" class="player-name">—</span>
-      <span id="opponent-rating" class="player-rating" style="margin-left:8px;color:#555;">—</span>
-      <span id="opponent-clock" class="clock">—:——</span>
-    </div>
-    <div id="board" style="width:480px"></div>
-    <div id="my-bar" class="player-bar">
-      <span id="my-name" class="player-name">{{ my_username }}</span>
-      <span id="my-rating" class="player-rating" style="margin-left:8px;color:#555;">—</span>
-      <span id="my-clock" class="clock">—:——</span>
+        <span id="opponent-title" style="font-weight:bold;font-size:0.78rem;margin-right:3px;"></span>
+        <span id="opponent-name" class="player-name">—</span>
+        <span id="opponent-rating" class="player-rating" style="margin-left:8px;color:#555;">—</span>
+        <span id="opponent-clock" class="clock">—:——</span>
+      </div>
+      <div id="board" style="width:480px"></div>
+      <div id="my-bar" class="player-bar">
+        <span id="my-title" style="font-weight:bold;font-size:0.78rem;margin-right:3px;"></span>
     </div>
   </div>
 
@@ -114,6 +113,7 @@
 	  const GAME_ID = {{ game_id }};
 	  const MY_ID   = {{ my_id }};
 	  const SPECTATOR = {{ 'true' if spectator else 'false' }};
+	  const TITLE_COLORS = {GM:'#f01010',IM:'#e07000',FM:'#c0a000',CM:'#8888aa',NM:'#999',WGM:'#e01080',WIM:'#e07000',WFM:'#c0a000',WCM:'#8888aa',BOT:'#4e94d4'};
 
   let game = new Chess();
   let board = null;
@@ -323,6 +323,17 @@
 
 	    document.getElementById('my-name').textContent       = myColor === 'white' ? data.white : data.black;
 	    document.getElementById('opponent-name').textContent = myColor === 'white' ? data.black : data.white;
+    // display titles with colors
+    const myTitle = myColor === 'white' ? data.white_title : data.black_title;
+    const oppTitle = myColor === 'white' ? data.black_title : data.white_title;
+    if (myTitle) {
+      document.getElementById('my-title').textContent = myTitle;
+      document.getElementById('my-title').style.color = TITLE_COLORS[myTitle] || '#333';
+    }
+    if (oppTitle) {
+      document.getElementById('opponent-title').textContent = oppTitle;
+      document.getElementById('opponent-title').style.color = TITLE_COLORS[oppTitle] || '#333';
+    }
     document.getElementById('my-rating').textContent      = myColor === 'white' ? `${data.white_rating} (${data.white_rank})` : `${data.black_rating} (${data.black_rank})`;
     document.getElementById('opponent-rating').textContent = myColor === 'white' ? `${data.black_rating} (${data.black_rank})` : `${data.white_rating} (${data.white_rank})`;
 	    board = Chessboard('board', {
