@@ -37,12 +37,18 @@
     .alert a { color: #ffd700; font-weight: bold; }
     .guest-note { background: #0f2a0f; border: 1px solid #2e7d32; color: #a5d6a7; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; font-size: 0.88rem; }
     .guest-note a { color: #66bb6a; }
-    .chart-label { font-size: 0.82rem; color: #aaa; margin-top: 14px; margin-bottom: 4px; }
-    .mini-chart { height: 160px; border: 1px solid #0f3460; border-radius: 8px; background: #0f1c35; padding: 10px; position: relative; }
-    .perf-highlight { font-size: 1.4rem; font-weight: bold; color: #64b5f6; }
+    .perf-highlight { font-size: 1.3rem; font-weight: bold; color: #64b5f6; }
     .profile-btn { display: inline-block; margin-top: 16px; background: #1a4a8a; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 0.93rem; text-decoration: none; }
     .profile-btn:hover { background: #2457a2; text-decoration: none; }
-    #ping-bar { position: fixed; left: 14px; bottom: 14px; background: rgba(15,52,96,.92); border: 1px solid #1a4a8a; border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; display: flex; align-items: center; gap: 8px; z-index: 20; }
+    .chart-wrap { height: 180px; background: #0f1c35; border: 1px solid #0f3460; border-radius: 8px; padding: 10px; }
+    #ping-bar {
+      position: fixed; left: 14px; bottom: 14px;
+      background: rgba(15,52,96,.95); border: 1px solid #1a4a8a;
+      border-radius: 10px; padding: 10px 14px;
+      font-size: 0.8rem; display: flex; flex-direction: column; gap: 6px;
+      z-index: 20; min-width: 160px;
+    }
+    .ping-row { display: flex; align-items: center; gap: 8px; }
     .ping-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
     .ping-bars span { width: 4px; background: #2d5a27; border-radius: 2px; opacity: .3; }
     .ping-bars span:nth-child(1) { height: 4px; }
@@ -55,6 +61,9 @@
     .ping-bars.bad span:nth-child(-n+2) { background: #ef9a9a; opacity: 1; }
     .ping-bars.bad span:nth-child(n+3) { opacity: .2; }
     .ping-bars.down span { background: #e94560; opacity: .25; }
+    .ping-stat { color: #aaa; font-size: 0.78rem; }
+    .ping-stat span { color: #e0e0e0; font-weight: bold; }
+    .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #81c784; display: inline-block; box-shadow: 0 0 4px #81c784; }
   </style>
 </head>
 <body>
@@ -98,10 +107,6 @@
           <td><span class="perf-highlight" id="perf-last-3">—</span></td>
         </tr>
       </table>
-
-      <div class="chart-label">Elo graph (last 90 days)</div>
-      <div id="elo-mini-chart" class="mini-chart"></div>
-
       <a class="profile-btn" href="/profile">View Full Profile →</a>
     </div>
     {% endif %}
@@ -131,6 +136,13 @@
     {% endif %}
   </div>
 
+  {% if current_user.is_authenticated %}
+  <div class="card">
+    <h2>Elo Graph <span style="color:#aaa;font-size:0.82rem;font-weight:normal;">last 90 days</span></h2>
+    <div id="elo-chart" class="chart-wrap"></div>
+  </div>
+  {% endif %}
+
   <div class="card">
     <h2>Tournaments</h2>
     <table>
@@ -152,8 +164,12 @@
 </div>
 
 <div id="ping-bar">
-  <div id="ping-text">Ping: -- ms</div>
-  <div id="ping-bars" class="ping-bars down"><span></span><span></span><span></span><span></span></div>
+  <div class="ping-row">
+    <div id="ping-bars" class="ping-bars down"><span></span><span></span><span></span><span></span></div>
+    <div id="ping-text" style="color:#e0e0e0;font-weight:bold;">-- ms</div>
+  </div>
+  <div class="ping-stat">Games played: <span id="stat-games">—</span></div>
+  <div class="ping-stat"><span class="online-dot"></span> Online: <span id="stat-online">—</span></div>
 </div>
 
 <script>
@@ -218,52 +234,58 @@
       container.innerHTML = '<div style="color:#aaa;font-size:0.85rem;padding-top:8px;">No rating history yet.</div>';
       return;
     }
-
     const w = container.clientWidth - 20;
-    const h = container.clientHeight - 30;
+    const h = container.clientHeight - 28;
     const minR = Math.min(...points.map(p => p.rating));
     const maxR = Math.max(...points.map(p => p.rating));
     const span = Math.max(1, maxR - minR);
 
-    const pts = points.map((p, i) => {
-      const x = (i / Math.max(1, points.length - 1)) * w;
-      const y = h - ((p.rating - minR) / span) * h;
-      return [x, y];
-    });
+    const pts = points.map((p, i) => ({
+      x: (i / Math.max(1, points.length - 1)) * w,
+      y: h - ((p.rating - minR) / span) * h,
+      rating: p.rating,
+    }));
 
-    const polyline = pts.map(([x,y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-
-    const areaPath = [
-      `M ${pts[0][0].toFixed(1)},${h}`,
-      ...pts.map(([x,y]) => `L ${x.toFixed(1)},${y.toFixed(1)}`),
-      `L ${pts[pts.length-1][0].toFixed(1)},${h}`,
-      'Z'
+    const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const area = [
+      `M ${pts[0].x.toFixed(1)},${h}`,
+      ...pts.map(p => `L ${p.x.toFixed(1)},${p.y.toFixed(1)}`),
+      `L ${pts[pts.length-1].x.toFixed(1)},${h}`, 'Z'
     ].join(' ');
 
+    const last = pts[pts.length - 1];
+
+    const gridRatings = [minR, Math.round((minR+maxR)/2), maxR];
+    const gridLines = gridRatings.map(val => {
+      const gy = h - ((val - minR) / span) * h;
+      return `<line x1="0" y1="${gy.toFixed(1)}" x2="${w}" y2="${gy.toFixed(1)}" stroke="#0f3460" stroke-width="1"/>
+              <text x="2" y="${(gy - 3).toFixed(1)}" fill="#555" font-size="9">${val}</text>`;
+    }).join('');
+
     container.innerHTML = `
-      <svg viewBox="0 0 ${w} ${h + 20}" width="100%" height="100%" preserveAspectRatio="none">
+      <svg viewBox="0 0 ${w} ${h + 4}" width="100%" height="${h + 4}">
         <defs>
-          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#64b5f6" stop-opacity="0.25"/>
+          <linearGradient id="eloGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#64b5f6" stop-opacity="0.28"/>
             <stop offset="100%" stop-color="#64b5f6" stop-opacity="0"/>
           </linearGradient>
         </defs>
-        <path d="${areaPath}" fill="url(#chartGrad)" />
-        <polyline fill="none" stroke="#64b5f6" stroke-width="2" points="${polyline}" />
-        <circle cx="${pts[pts.length-1][0].toFixed(1)}" cy="${pts[pts.length-1][1].toFixed(1)}" r="3" fill="#64b5f6" />
+        ${gridLines}
+        <path d="${area}" fill="url(#eloGrad)" />
+        <polyline fill="none" stroke="#64b5f6" stroke-width="2" stroke-linejoin="round" points="${polyline}" />
+        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="#64b5f6" />
       </svg>
-      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#aaa;margin-top:2px;">
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#aaa;margin-top:3px;">
         <span>${minR}</span>
-        <span style="color:#64b5f6;font-weight:bold;">${points[points.length-1].rating}</span>
+        <span style="color:#64b5f6;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
         <span>${maxR}</span>
-      </div>
-    `;
+      </div>`;
   }
 
-  async function loadMiniRatingChart() {
+  async function loadEloChart() {
     {% if current_user.is_authenticated %}
     const points = await api('/api/me/rating-history?days=90');
-    drawLineChart(document.getElementById('elo-mini-chart'), points);
+    drawLineChart(document.getElementById('elo-chart'), points);
     {% endif %}
   }
 
@@ -271,22 +293,29 @@
     const text = document.getElementById('ping-text');
     const bars = document.getElementById('ping-bars');
     if (!ok || ms == null) {
-      text.textContent = 'Ping: offline';
+      text.textContent = 'offline';
       bars.className = 'ping-bars down';
       return;
     }
-    text.textContent = `Ping: ${ms} ms`;
+    text.textContent = `${ms} ms`;
     if (ms < 120) bars.className = 'ping-bars good';
     else if (ms < 280) bars.className = 'ping-bars medium';
     else bars.className = 'ping-bars bad';
   }
 
-  async function updatePing() {
+  async function updatePingAndStats() {
     const start = performance.now();
     try {
-      const r = await fetch('/api/tournaments', { credentials: 'same-origin', cache: 'no-store' });
-      if (!r.ok) throw new Error('ping failed');
-      renderPing(Math.round(performance.now() - start), true);
+      const [statsRes] = await Promise.all([
+        fetch('/api/stats', { credentials: 'same-origin', cache: 'no-store' }),
+      ]);
+      const ms = Math.round(performance.now() - start);
+      renderPing(ms, true);
+      if (statsRes.ok) {
+        const stats = await statsRes.json();
+        document.getElementById('stat-games').textContent = stats.total_games.toLocaleString();
+        document.getElementById('stat-online').textContent = stats.players_online;
+      }
     } catch (e) {
       renderPing(null, false);
     }
@@ -295,13 +324,13 @@
   loadTournaments();
   loadPlayers();
   checkActiveGame();
-  loadMiniRatingChart();
-  updatePing();
+  loadEloChart();
+  updatePingAndStats();
 
   setInterval(loadTournaments, 10000);
   setInterval(checkActiveGame, 5000);
-  setInterval(updatePing, 5000);
-  window.addEventListener('resize', loadMiniRatingChart);
+  setInterval(updatePingAndStats, 5000);
+  window.addEventListener('resize', loadEloChart);
 </script>
 </body>
 </html>

@@ -121,6 +121,23 @@ def logout():
 # API – Players
 # ──────────────────────────────────────────
 
+@app.route("/api/stats")
+def site_stats():
+    total_games = Game.query.filter(Game.result != "ongoing").count()
+    online_player_ids = set()
+    ongoing_games = Game.query.filter_by(result="ongoing").all()
+    for g in ongoing_games:
+        online_player_ids.add(g.white_id)
+        online_player_ids.add(g.black_id)
+    queued = TournamentPlayer.query.filter_by(in_queue=True, active=True).all()
+    for tp in queued:
+        online_player_ids.add(tp.player_id)
+    return jsonify({
+        "total_games": total_games,
+        "players_online": len(online_player_ids),
+    })
+
+
 @app.route("/api/players")
 def list_players():
     players = Player.query.order_by(Player.rating.desc()).all()
