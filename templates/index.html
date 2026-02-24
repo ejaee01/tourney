@@ -22,6 +22,8 @@
     input:focus, select:focus { outline: none; border-color: #759900; box-shadow: 0 0 0 2px rgba(117,153,0,.15); }
     button { background: #759900; color: #fff; border: none; padding: 9px 18px; border-radius: 3px; cursor: pointer; font-size: 0.93rem; font-weight: 600; }
     button:hover { background: #618200; }
+    button.secondary { background: #eee; color: #333; border: 1px solid #ccc; }
+    button.secondary:hover { background: #e0e0e0; }
     .msg { margin-top: 7px; font-size: 0.83rem; color: #759900; }
     .msg.err { color: #c62828; }
     table { width: 100%; border-collapse: collapse; }
@@ -145,6 +147,29 @@
       <div id="t-msg" class="msg"></div>
     </div>
     {% endif %}
+
+    {% if current_user.is_authenticated %}
+    <div class="card">
+      <h2>Quick Play</h2>
+      <label>Time Control</label>
+      <select id="qp-tc">
+        <option value="1+0">1+0 Bullet</option>
+        <option value="2+1">2+1 Bullet</option>
+        <option value="3+0">3+0 Blitz</option>
+        <option value="3+2" selected>3+2 Blitz</option>
+        <option value="5+0">5+0 Blitz</option>
+        <option value="5+3">5+3 Blitz</option>
+        <option value="10+0">10+0 Rapid</option>
+      </select>
+      <button onclick="quickJoin()">Find Human Match</button>
+      <button class="secondary" onclick="quickLeave()">Cancel</button>
+      <hr style="border:none;border-top:1px solid #eee;margin:12px 0;" />
+      <label>Play vs Bot</label>
+      <select id="qp-bot"></select>
+      <button onclick="playBot()">Play Bot</button>
+      <div id="qp-msg" class="msg"></div>
+    </div>
+    {% endif %}
   </div>
 
   {% if current_user.is_authenticated %}
@@ -241,6 +266,71 @@
       document.getElementById('game-link').href = `/game/${me.active_game_id}`;
     }
     {% endif %}
+  }
+
+  async function loadBots() {
+    {% if current_user.is_authenticated %}
+    const sel = document.getElementById('qp-bot');
+    if (!sel) return;
+    const list = await api('/api/bots?limit=50');
+    if (!list.length) {
+      sel.innerHTML = '<option value="">No bots yet (create in Admin)</option>';
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = list.map(b => `<option value="${b.id}">${b.username} (${b.rating})</option>`).join('');
+    {% endif %}
+  }
+
+  async function quickJoin() {
+    const msg = document.getElementById('qp-msg');
+    msg.textContent = 'Finding match…';
+    msg.className = 'msg';
+    const tc = document.getElementById('qp-tc').value;
+    const res = await api('/api/casual/join', 'POST', { time_control: tc });
+    if (res.error) {
+      msg.textContent = res.error;
+      msg.className = 'msg err';
+      if (res.game_id) {
+        msg.innerHTML += ` <a href="/game/${res.game_id}">Open game →</a>`;
+      }
+      return;
+    }
+    if (res.matched && res.game_id) {
+      window.location = `/game/${res.game_id}`;
+      return;
+    }
+    msg.textContent = 'Queued. Leave this tab open while waiting.';
+  }
+
+  async function quickLeave() {
+    const msg = document.getElementById('qp-msg');
+    await api('/api/casual/leave', 'POST', {});
+    msg.textContent = 'Canceled.';
+    msg.className = 'msg';
+  }
+
+  async function playBot() {
+    const msg = document.getElementById('qp-msg');
+    msg.textContent = '';
+    msg.className = 'msg';
+    const botSel = document.getElementById('qp-bot');
+    const botId = +(botSel && botSel.value);
+    if (!botId) {
+      msg.textContent = 'Select a bot first.';
+      msg.className = 'msg err';
+      return;
+    }
+    const tc = document.getElementById('qp-tc').value;
+    const res = await api('/api/casual/play-bot', 'POST', { bot_id: botId, time_control: tc });
+    if (res.error) {
+      msg.textContent = res.error;
+      msg.className = 'msg err';
+      if (res.game_id) msg.innerHTML += ` <a href="/game/${res.game_id}">Open game →</a>`;
+      return;
+    }
+    window.location = `/game/${res.game_id}`;
   }
 
   function fmtDate(ts) {
@@ -357,6 +447,7 @@
 
   loadTournaments();
   loadPlayers();
+  loadBots();
   checkActiveGame();
   loadEloChart(true);
   updatePingAndStats();

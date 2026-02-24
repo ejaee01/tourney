@@ -237,3 +237,13 @@ class Presence(db.Model):
     last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     player = db.relationship("Player")
+
+
+class CasualQueue(db.Model):
+    __tablename__ = "casual_queue"
+
+    player_id = db.Column(db.Integer, db.ForeignKey("players.id"), primary_key=True)
+    time_control = db.Column(db.String(32), nullable=False, default="3+2", index=True)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    player = db.relationship("Player")

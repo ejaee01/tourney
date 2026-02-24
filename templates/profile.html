@@ -243,6 +243,12 @@
 
   loadChart(true);
   window.addEventListener('resize', () => loadChart(false));
+
+  {% if current_user.is_authenticated %}
+  setInterval(() => {
+    fetch('/api/presence', { credentials: 'same-origin', cache: 'no-store' });
+  }, 15000);
+  {% endif %}
 </script>
 </body>
 </html>

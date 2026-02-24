@@ -1,10 +1,23 @@
 from datetime import datetime, timedelta
+import random
+import secrets
 import chess
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 
-from models import db, Player, Tournament, TournamentPlayer, Game, RatingHistory, PairingHistory, TITLES, Presence
+from models import (
+    db,
+    Player,
+    Tournament,
+    TournamentPlayer,
+    Game,
+    RatingHistory,
+    PairingHistory,
+    TITLES,
+    Presence,
+    CasualQueue,
+)
 from arena import ArenaEngine
 
 app = Flask(__name__)
@@ -87,7 +100,7 @@ def _touch_presence():
 
 @app.before_request
 def _presence_before_request():
-    if request.path.startswith("/api/") and request.path != "/api/ping":
+    if request.path != "/api/ping":
         _touch_presence()
 
 
@@ -197,6 +210,11 @@ def ping():
     return ("", 204, {"Cache-Control": "no-store"})
 
 
+@app.route("/api/presence")
+def presence():
+    return ("", 204, {"Cache-Control": "no-store"})
+
+
 @app.route("/api/players")
 def list_players():
     limit = request.args.get("limit", type=int)
@@ -247,6 +265,190 @@ def player_rating_history(player_id):
         points.append({"timestamp": now.isoformat(), "rating": round(player.rating)})
 
     return jsonify(points)
+
+
+@app.route("/api/bots")
+def list_bots():
+    limit = request.args.get("limit", type=int)
+    limit = min(200, max(1, limit)) if limit else 50
+    bots = (
+        Player.query.filter_by(title="BOT", banned=False)
+        .order_by(Player.rating.desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify(
+        [
+            {
+                "id": b.id,
+                "username": b.username,
+                "rating": round(b.rating),
+            }
+            for b in bots
+        ]
+    )
+
+
+def _cleanup_casual_queue(now):
+    stale_cutoff = now - timedelta(minutes=10)
+    CasualQueue.query.filter(CasualQueue.joined_at < stale_cutoff).delete(
+        synchronize_session=False
+    )
+    db.session.commit()
+
+
+def _create_casual_game(player_a_id, player_b_id, time_control):
+    now = datetime.utcnow()
+
+    t = Tournament(
+        name=f"Casual {time_control}",
+        duration_minutes=0,
+        time_control=time_control,
+        status="active",
+        started_at=now,
+        ends_at=now + timedelta(days=3650),
+    )
+    db.session.add(t)
+    db.session.flush()
+
+    db.session.add(
+        TournamentPlayer(tournament_id=t.id, player_id=player_a_id, in_queue=False, active=True)
+    )
+    db.session.add(
+        TournamentPlayer(tournament_id=t.id, player_id=player_b_id, in_queue=False, active=True)
+    )
+
+    base_ms, inc_ms = t._parse_time_control()
+    if random.random() < 0.5:
+        white_id, black_id = player_a_id, player_b_id
+    else:
+        white_id, black_id = player_b_id, player_a_id
+
+    game = Game(
+        tournament_id=t.id,
+        white_id=white_id,
+        black_id=black_id,
+        result="ongoing",
+        white_clock_ms=base_ms,
+        black_clock_ms=base_ms,
+        increment_ms=inc_ms,
+    )
+    db.session.add(game)
+    db.session.commit()
+    return game.id
+
+
+@app.route("/api/casual/join", methods=["POST"])
+@login_required
+def casual_join():
+    now = datetime.utcnow()
+    _cleanup_casual_queue(now)
+
+    if current_user.banned:
+        return jsonify({"error": "banned"}), 403
+
+    active_game = Game.query.filter(
+        Game.result == "ongoing",
+        db.or_(Game.white_id == current_user.id, Game.black_id == current_user.id),
+    ).first()
+    if active_game:
+        return jsonify({"error": "already in a game", "game_id": active_game.id}), 400
+
+    data = request.get_json() or {}
+    time_control = (data.get("time_control") or "3+2").strip()
+    if not time_control:
+        time_control = "3+2"
+
+    my_row = CasualQueue.query.get(current_user.id)
+    if my_row:
+        my_row.time_control = time_control
+        my_row.joined_at = now
+    else:
+        db.session.add(
+            CasualQueue(player_id=current_user.id, time_control=time_control, joined_at=now)
+        )
+    db.session.commit()
+
+    cutoff = now - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+    other = (
+        db.session.query(CasualQueue)
+        .join(Presence, Presence.player_id == CasualQueue.player_id)
+        .filter(
+            CasualQueue.time_control == time_control,
+            CasualQueue.player_id != current_user.id,
+            Presence.last_seen_at >= cutoff,
+        )
+        .order_by(CasualQueue.joined_at.asc())
+        .with_for_update()
+        .first()
+    )
+
+    if not other:
+        return jsonify({"ok": True, "queued": True, "time_control": time_control})
+
+    other_player = Player.query.get(other.player_id)
+    if not other_player or other_player.banned:
+        CasualQueue.query.filter_by(player_id=other.player_id).delete()
+        db.session.commit()
+        return jsonify({"ok": True, "queued": True, "time_control": time_control})
+
+    other_active_game = Game.query.filter(
+        Game.result == "ongoing",
+        db.or_(Game.white_id == other.player_id, Game.black_id == other.player_id),
+    ).first()
+    if other_active_game:
+        CasualQueue.query.filter_by(player_id=other.player_id).delete(synchronize_session=False)
+        db.session.commit()
+        return jsonify({"ok": True, "queued": True, "time_control": time_control})
+
+    CasualQueue.query.filter(
+        CasualQueue.player_id.in_([current_user.id, other.player_id])
+    ).delete(synchronize_session=False)
+    db.session.commit()
+
+    game_id = _create_casual_game(current_user.id, other.player_id, time_control)
+    return jsonify({"ok": True, "matched": True, "game_id": game_id})
+
+
+@app.route("/api/casual/leave", methods=["POST"])
+@login_required
+def casual_leave():
+    CasualQueue.query.filter_by(player_id=current_user.id).delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/casual/play-bot", methods=["POST"])
+@login_required
+def casual_play_bot():
+    if current_user.banned:
+        return jsonify({"error": "banned"}), 403
+
+    data = request.get_json() or {}
+    bot_id = data.get("bot_id")
+    if not bot_id:
+        return jsonify({"error": "bot_id required"}), 400
+    try:
+        bot_id = int(bot_id)
+    except Exception:
+        return jsonify({"error": "bot_id must be an int"}), 400
+    time_control = (data.get("time_control") or "3+2").strip()
+    if not time_control:
+        time_control = "3+2"
+
+    bot = Player.query.get_or_404(bot_id)
+    if bot.title != "BOT" or bot.banned:
+        return jsonify({"error": "invalid bot"}), 400
+
+    active_game = Game.query.filter(
+        Game.result == "ongoing",
+        db.or_(Game.white_id == current_user.id, Game.black_id == current_user.id),
+    ).first()
+    if active_game:
+        return jsonify({"error": "already in a game", "game_id": active_game.id}), 400
+
+    game_id = _create_casual_game(current_user.id, bot.id, time_control)
+    return jsonify({"ok": True, "game_id": game_id})
 
 
 @app.route("/api/me")
@@ -321,7 +523,11 @@ def create_tournament():
 
 @app.route("/api/tournaments")
 def list_tournaments():
-    tournaments = Tournament.query.order_by(Tournament.created_at.desc()).all()
+    tournaments = (
+        Tournament.query.filter(~Tournament.name.startswith("Casual "))
+        .order_by(Tournament.created_at.desc())
+        .all()
+    )
     return jsonify([t.to_dict() for t in tournaments])
 
 
@@ -363,6 +569,7 @@ def tournament_games(tournament_id):
 
 @app.route("/api/games/<int:game_id>")
 def get_game(game_id):
+    _maybe_play_bot_move(game_id)
     return jsonify(Game.query.get_or_404(game_id).to_dict())
 
 
@@ -433,7 +640,71 @@ def make_move(game_id):
     else:
         db.session.commit()
 
-    return jsonify(game.to_dict())
+    if not result:
+        _maybe_play_bot_move(game_id)
+    return jsonify(Game.query.get_or_404(game_id).to_dict())
+
+
+def _maybe_play_bot_move(game_id):
+    game = Game.query.filter_by(id=game_id).with_for_update().first()
+    if not game or game.result != "ongoing":
+        return False
+
+    try:
+        board = chess.Board(game.fen)
+    except Exception:
+        return False
+
+    to_move_id = game.white_id if board.turn == chess.WHITE else game.black_id
+    bot = Player.query.get(to_move_id)
+    if not bot or bot.title != "BOT" or bot.banned:
+        return False
+
+    legal = list(board.legal_moves)
+    if not legal:
+        return False
+    captures = [m for m in legal if board.is_capture(m)]
+    move = random.choice(captures or legal)
+    uci = move.uci()
+
+    now = datetime.utcnow()
+    if game.last_clock_update:
+        elapsed = int((now - game.last_clock_update).total_seconds() * 1000)
+        if to_move_id == game.white_id:
+            game.white_clock_ms = max(0, game.white_clock_ms - elapsed) + game.increment_ms
+        else:
+            game.black_clock_ms = max(0, game.black_clock_ms - elapsed) + game.increment_ms
+    else:
+        game.last_clock_update = now
+
+    board.push(move)
+    game.fen = board.fen()
+    moves = game.pgn_moves.split() if game.pgn_moves else []
+    moves.append(uci)
+    game.pgn_moves = " ".join(moves)
+
+    game.clock_running_for = "black" if to_move_id == game.white_id else "white"
+    game.last_clock_update = now
+
+    result = None
+    if board.is_checkmate():
+        result = "white" if to_move_id == game.white_id else "black"
+    elif board.is_stalemate() or board.is_insufficient_material() or board.is_seventyfive_moves():
+        result = "draw"
+    elif game.white_clock_ms <= 0:
+        result = "black"
+    elif game.black_clock_ms <= 0:
+        result = "white"
+
+    if result:
+        game.result = result
+        game.ended_at = now
+        db.session.commit()
+        engine.submit_result(game_id, result)
+    else:
+        db.session.commit()
+
+    return True
 
 
 @app.route("/api/games/<int:game_id>/resign", methods=["POST"])
@@ -621,6 +892,37 @@ def admin_set_title(player_id):
     p.title = title if title in TITLES else None
     db.session.commit()
     return jsonify({"ok": True, "title": p.title})
+
+
+@app.route("/api/admin/create-bot", methods=["POST"])
+@login_required
+def admin_create_bot():
+    if not current_user.is_admin:
+        return jsonify({"error": "forbidden"}), 403
+
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip()
+    if not username:
+        return jsonify({"error": "username required"}), 400
+    if len(username) > 64:
+        return jsonify({"error": "username too long"}), 400
+    if Player.query.filter_by(username=username).first():
+        return jsonify({"error": "username already taken"}), 400
+
+    rating = data.get("rating", 500)
+    try:
+        rating = float(rating)
+    except Exception:
+        return jsonify({"error": "rating must be a number"}), 400
+    rating = max(100.0, min(3000.0, rating))
+
+    bot = Player(username=username, email=None, rating=rating, rd=250.0, title="BOT")
+    bot.set_password(secrets.token_urlsafe(24))
+    db.session.add(bot)
+    db.session.flush()
+    db.session.add(RatingHistory(player_id=bot.id, rating=bot.rating, rd=bot.rd))
+    db.session.commit()
+    return jsonify({"ok": True, "bot": bot.to_dict()})
 
 
 @app.route("/api/admin/reset-ratings", methods=["POST"])

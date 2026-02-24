@@ -30,6 +30,8 @@
     .btn-danger { background: #b71c1c; color: #fff; }
     .btn-danger:hover { background: #7f0000; }
     select.title-sel { padding: 4px 6px; border: 1px solid #bbb; border-radius: 3px; font-size: 0.82rem; background: #fff; color: #333; }
+    input.text, input.num { padding: 6px 10px; border: 1px solid #bbb; border-radius: 3px; font-size: 0.9rem; background: #fff; color: #333; }
+    input.text:focus, input.num:focus { outline: none; border-color: #c62828; box-shadow: 0 0 0 2px rgba(198,40,40,.12); }
     .badge-banned { background: #fce4ec; color: #c62828; border: 1px solid #ffcdd2; display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.74rem; font-weight: 600; }
     .badge-ok { background: #e8f5e9; color: #388e3c; border: 1px solid #c8e6c9; display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.74rem; font-weight: 600; }
     .title-badge { font-weight: bold; font-size: 0.8rem; margin-right: 3px; }
@@ -59,12 +61,33 @@
       <button class="btn btn-danger" onclick="resetRatings()">Reset All Ratings</button>
       <span id="reset-msg" style="font-size:0.85rem;"></span>
     </div>
-  </div>
+	  </div>
 
-  <div class="card">
-    <h2>Players ({{ players | length }})</h2>
-    <table>
-      <thead>
+	  <div class="card">
+	    <h2>Bots</h2>
+	    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+	      <div>
+	        <div style="font-size:0.82rem;color:#555;font-weight:600;margin-bottom:4px;">Bot username</div>
+	        <input id="bot-name" class="text" placeholder="ArenaBot" />
+	      </div>
+	      <div>
+	        <div style="font-size:0.82rem;color:#555;font-weight:600;margin-bottom:4px;">Starting rating</div>
+	        <input id="bot-rating" class="num" type="number" value="500" min="100" max="3000" />
+	      </div>
+	      <button class="btn btn-blue" onclick="createBot()">Create Bot</button>
+	      <span id="bot-msg" style="font-size:0.85rem;"></span>
+	    </div>
+	    <p style="font-size:0.82rem;color:#777;margin-top:10px;">Bots use title <strong>BOT</strong> and can play in Quick Play.</p>
+	  </div>
+
+	  <div class="card">
+	    <h2>Players (<span id="player-total">{{ players | length }}</span>)</h2>
+	    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+	      <input id="player-search" class="text" style="min-width:260px;" placeholder="Search by id / username / title / email…" oninput="filterPlayers()" />
+	      <span style="color:#777;font-size:0.85rem;">Showing <span id="player-shown">{{ players | length }}</span></span>
+	    </div>
+	    <table>
+	      <thead>
         <tr>
           <th>#</th>
           <th>Username</th>
@@ -74,18 +97,18 @@
           <th>Status</th>
           <th>Actions</th>
         </tr>
-      </thead>
-      <tbody>
-        {% for p in players %}
-        <tr id="row-{{ p.id }}">
-          <td style="color:#777;">{{ p.id }}</td>
-          <td>
-            {% if p.title %}
-              <span class="title-badge" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(p.title,'#333') }}">{{ p.title }}</span>
-            {% endif %}
-            {{ p.username }}
-            {% if p.is_admin %}<span style="color:#c62828;font-size:0.75rem;margin-left:4px;">[admin]</span>{% endif %}
-          </td>
+	      </thead>
+	      <tbody id="players-body">
+	        {% for p in players %}
+	        <tr id="row-{{ p.id }}" data-search="{{ p.id }} {{ p.username }} {{ p.email or '' }} {{ p.title or '' }} {{ p.rating|int }}">
+	          <td style="color:#777;">{{ p.id }}</td>
+	          <td>
+	            {% if p.title %}
+	              <span class="title-badge" style="color:{{ {'GM':'#f01010','IM':'#e07000','FM':'#c0a000','CM':'#8888aa','NM':'#999','WGM':'#e01080','WIM':'#e07000','WFM':'#c0a000','WCM':'#8888aa','BOT':'#4e94d4'}.get(p.title,'#333') }}">{{ p.title }}</span>
+	            {% endif %}
+	            <a href="/profile/{{ p.id }}">{{ p.username }}</a>
+	            {% if p.is_admin %}<span style="color:#c62828;font-size:0.75rem;margin-left:4px;">[admin]</span>{% endif %}
+	          </td>
           <td>
             <select class="title-sel" id="title-{{ p.id }}">
               <option value="">— none —</option>
@@ -196,18 +219,54 @@
     }
   }
 
-  async function resetRatings() {
-    if (!confirm('Reset ALL player ratings to 500/250 and clear rating history? This cannot be undone.')) return;
-    const el = document.getElementById('reset-msg');
-    const res = await api('/api/admin/reset-ratings');
+	  async function resetRatings() {
+	    if (!confirm('Reset ALL player ratings to 500/250 and clear rating history? This cannot be undone.')) return;
+	    const el = document.getElementById('reset-msg');
+	    const res = await api('/api/admin/reset-ratings');
     if (res.ok) {
       el.style.color = '#388e3c';
       el.textContent = res.message;
     } else {
       el.style.color = '#c62828';
       el.textContent = res.error || 'Error';
-    }
-  }
-</script>
+	    }
+	  }
+
+	  function filterPlayers() {
+	    const q = (document.getElementById('player-search').value || '').toLowerCase().trim();
+	    const rows = document.querySelectorAll('#players-body tr');
+	    let shown = 0;
+	    rows.forEach(row => {
+	      const hay = (row.dataset.search || '').toLowerCase();
+	      const ok = !q || hay.includes(q);
+	      row.style.display = ok ? '' : 'none';
+	      if (ok) shown += 1;
+	    });
+	    const shownEl = document.getElementById('player-shown');
+	    if (shownEl) shownEl.textContent = shown;
+	  }
+
+	  async function createBot() {
+	    const msg = document.getElementById('bot-msg');
+	    msg.style.color = '#777';
+	    msg.textContent = 'Creating…';
+	    const username = (document.getElementById('bot-name').value || '').trim();
+	    const rating = +document.getElementById('bot-rating').value || 500;
+	    const res = await api('/api/admin/create-bot', { username, rating });
+	    if (res.ok) {
+	      msg.style.color = '#388e3c';
+	      msg.textContent = `Created ${res.bot.username} (#${res.bot.id})`;
+	      setTimeout(()=>location.reload(), 500);
+	    } else {
+	      msg.style.color = '#c62828';
+	      msg.textContent = res.error || 'Error';
+	    }
+	  }
+
+	  filterPlayers();
+	  setInterval(() => {
+	    fetch('/api/presence', { credentials: 'same-origin', cache: 'no-store' });
+	  }, 15000);
+	</script>
 </body>
 </html>

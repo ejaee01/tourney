@@ -45,6 +45,8 @@ class ArenaEngine:
 
         active = Tournament.query.filter_by(status="active").all()
         for t in active:
+            if t.name.startswith("Casual "):
+                continue
             if t.ends_at and now >= t.ends_at:
                 self._finish_tournament(t)
             else:
@@ -116,6 +118,10 @@ class ArenaEngine:
         tp_black.in_queue = True
         tp_black.queue_joined_at = datetime.utcnow()
         db.session.commit()
+
+        tournament = Tournament.query.get(game.tournament_id)
+        if tournament and tournament.name.startswith("Casual ") and tournament.status != "finished":
+            self._finish_tournament(tournament)
 
     def _get_recent_opponents(self, tournament_id, player_id):
         cutoff = datetime.utcnow() - timedelta(minutes=10)
