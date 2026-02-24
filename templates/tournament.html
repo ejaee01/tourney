@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tournament</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+    header { background: #16213e; padding: 16px 32px; display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #0f3460; }
+    header h1 { font-size: 1.4rem; color: #e94560; }
+    #timer { font-size: 1.8rem; font-weight: bold; color: #ffd700; margin-left: auto; }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+    @media (max-width: 700px) { .container { grid-template-columns: 1fr; } }
+    .card { background: #16213e; border-radius: 10px; padding: 20px; border: 1px solid #0f3460; }
+    .card h2 { color: #e94560; margin-bottom: 14px; font-size: 1.05rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 7px 10px; color: #aaa; font-size: 0.78rem; text-transform: uppercase; border-bottom: 1px solid #0f3460; }
+    td { padding: 9px 10px; border-bottom: 1px solid #0f3460; font-size: 0.88rem; }
+    tr:hover td { background: #1e2d4f; }
+    .rank { font-weight: bold; color: #ffd700; }
+    .streak { color: #ff7043; font-size: 0.8rem; }
+    .perf { color: #64b5f6; }
+    input, select { width: 100%; padding: 7px 10px; background: #0f3460; border: 1px solid #1a4a8a; border-radius: 6px; color: #e0e0e0; font-size: 0.9rem; margin-bottom: 10px; }
+    button { background: #e94560; color: #fff; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; width: 100%; margin-bottom: 8px; }
+    button:hover { background: #c73652; }
+    button.secondary { background: #0f3460; }
+    button.secondary:hover { background: #1a4a8a; }
+    .msg { font-size: 0.82rem; color: #4caf50; margin-bottom: 8px; }
+    .msg.err { color: #e94560; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; }
+    .badge.waiting  { background: #2d5a27; color: #81c784; }
+    .badge.active   { background: #7b1e1e; color: #ef9a9a; }
+    .badge.finished { background: #333; color: #999; }
+    .badge.ongoing  { background: #2d5a27; color: #81c784; }
+    .badge.white    { background: #444; color: #fff; }
+    .badge.black    { background: #222; color: #fff; }
+    .badge.draw     { background: #555; color: #ccc; }
+    label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 4px; }
+    .section-sub { font-size: 0.78rem; color: #aaa; margin-bottom: 10px; }
+    hr { border: none; border-top: 1px solid #0f3460; margin: 14px 0; }
+    a { color: #64b5f6; text-decoration: none; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/" style="color:#aaa;font-size:0.9rem;">← Home</a>
+  <h1 id="t-name">Tournament</h1>
+  <span id="t-status" class="badge" style="margin-left:8px;"></span>
+  <div id="timer">--:--</div>
+  <div style="margin-left:auto;display:flex;gap:12px;align-items:center;font-size:0.85rem;">
+    {% if current_user.is_authenticated %}
+      <span style="color:#ffd700;font-weight:bold">{{ current_user.username }}</span>
+      <a href="/logout" style="color:#aaa;">Log out</a>
+    {% else %}
+      <a href="/login" style="color:#64b5f6;">Log in</a>
+    {% endif %}
+  </div>
+</header>
+
+<div id="game-alert" style="display:none;background:#7b3a00;border:1px solid #ffa000;color:#ffcc80;padding:10px 20px;align-items:center;justify-content:space-between;">
+  ♟ Your game is ready! <a id="game-link" href="#" style="color:#ffd700;font-weight:bold;">Go to board →</a>
+</div>
+
+<div class="container">
+
+  <div>
+    <div class="card" style="margin-bottom:20px;">
+      <h2>🏆 Live Leaderboard</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Player</th>
+            <th>Rating</th>
+            <th>Score</th>
+            <th>Games</th>
+            <th>W/D/L</th>
+            <th>Streak</th>
+            <th>Perf</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboard"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Recent Games</h2>
+      <table>
+        <thead>
+          <tr><th>White</th><th>Black</th><th>Result</th></tr>
+        </thead>
+        <tbody id="games-list"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="margin-bottom:20px;">
+      <h2>Join / Leave</h2>
+      {% if current_user.is_authenticated %}
+        <p style="font-size:0.85rem;color:#aaa;margin-bottom:10px;">Playing as <strong style="color:#ffd700">{{ current_user.username }}</strong></p>
+        <button onclick="joinTournament()">Join Tournament</button>
+        <button class="secondary" onclick="leaveTournament()">Leave Tournament</button>
+        <div id="join-msg" class="msg"></div>
+      {% else %}
+        <p style="font-size:0.85rem;color:#aaa;"><a href="/login" style="color:#64b5f6">Log in</a> to join this tournament.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <h2>Submit Game Result</h2>
+      <p class="section-sub">Use after your game finishes on your chess platform.</p>
+      <label>Game ID</label>
+      <input id="game-id" type="number" placeholder="Game ID" />
+      <label>Result</label>
+      <select id="game-result">
+        <option value="white">White wins</option>
+        <option value="black">Black wins</option>
+        <option value="draw">Draw</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <input type="checkbox" id="wb" style="width:auto;margin:0" /> White berserked
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <input type="checkbox" id="bb" style="width:auto;margin:0" /> Black berserked
+      </label>
+      <button onclick="submitResult()">Submit Result</button>
+      <div id="result-msg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>How Scoring Works</h2>
+      <table>
+        <tr><td>Win</td><td style="color:#4caf50;font-weight:bold;">+2 pts</td></tr>
+        <tr><td>Draw</td><td style="color:#ffd700;">+1 pt</td></tr>
+        <tr><td>Loss</td><td style="color:#e94560;">+0 pts</td></tr>
+        <tr><td>Win streak (3+)</td><td style="color:#ff7043;">+1 bonus</td></tr>
+        <tr><td>Berserk win</td><td style="color:#ce93d8;">+1 bonus</td></tr>
+      </table>
+      <hr />
+      <p style="font-size:0.8rem;color:#aaa;">Pairing runs every 60 seconds. Players are matched by score group then rating. Recent opponents are avoided for 10 minutes.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const TOURNAMENT_ID = {{ tournament_id }};
+  let endsAt = null;
+
+  async function api(url, method = 'GET', body = null) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    return r.json();
+  }
+
+  async function loadTournament() {
+    const t = await api(`/api/tournaments/${TOURNAMENT_ID}`);
+    document.getElementById('t-name').textContent = t.name;
+    const badge = document.getElementById('t-status');
+    badge.textContent = t.status;
+    badge.className = `badge ${t.status}`;
+    endsAt = t.ends_at ? new Date(t.ends_at + 'Z') : null;
+  }
+
+  async function loadLeaderboard() {
+    const board = await api(`/api/tournaments/${TOURNAMENT_ID}/leaderboard`);
+    const tbody = document.getElementById('leaderboard');
+    tbody.innerHTML = board.map(p => `
+      <tr>
+        <td class="rank">${p.rank}</td>
+        <td>${p.username}${p.provisional ? ' <sup style="color:#aaa;font-size:0.7rem">?</sup>' : ''}</td>
+        <td>${p.rating}</td>
+        <td style="font-weight:bold;color:#ffd700;">${p.score}</td>
+        <td>${p.games_played}</td>
+        <td>${p.wins}/${p.draws}/${p.losses}</td>
+        <td class="streak">${p.win_streak > 0 ? '🔥'.repeat(Math.min(p.win_streak, 5)) : ''}</td>
+        <td class="perf">${p.performance_rating || '—'}</td>
+      </tr>
+    `).join('');
+  }
+
+  async function loadGames() {
+    const games = await api(`/api/tournaments/${TOURNAMENT_ID}/games`);
+    const tbody = document.getElementById('games-list');
+    tbody.innerHTML = games.slice(0, 15).map(g => `
+      <tr style="cursor:pointer;" onclick="window.location='/game/${g.id}'">
+        <td>${g.white}${g.white_berserk ? ' ⚡' : ''}</td>
+        <td>${g.black}${g.black_berserk ? ' ⚡' : ''}</td>
+        <td><span class="badge ${g.result}">${g.result}</span></td>
+      </tr>
+    `).join('');
+  }
+
+  async function joinTournament() {
+    const msg = document.getElementById('join-msg');
+    const res = await api(`/api/tournaments/${TOURNAMENT_ID}/join`, 'POST', {});
+    if (res.error) { msg.textContent = res.error; msg.className = 'msg err'; }
+    else { msg.textContent = 'Joined! You will be paired in the next pairing cycle (up to 60s).'; msg.className = 'msg'; }
+  }
+
+  async function leaveTournament() {
+    const msg = document.getElementById('join-msg');
+    await api(`/api/tournaments/${TOURNAMENT_ID}/leave`, 'POST', {});
+    msg.textContent = 'Left tournament.'; msg.className = 'msg';
+  }
+
+  async function submitResult() {
+    const msg = document.getElementById('result-msg');
+    const gameId = +document.getElementById('game-id').value;
+    if (!gameId) { msg.textContent = 'Enter game ID'; msg.className = 'msg err'; return; }
+    const res = await api(`/api/games/${gameId}/result`, 'POST', {
+      result: document.getElementById('game-result').value,
+      white_berserk: document.getElementById('wb').checked,
+      black_berserk: document.getElementById('bb').checked,
+    });
+    if (res.error) { msg.textContent = res.error; msg.className = 'msg err'; }
+    else { msg.textContent = 'Result submitted!'; msg.className = 'msg'; loadLeaderboard(); loadGames(); }
+  }
+
+  function updateTimer() {
+    const el = document.getElementById('timer');
+    if (!endsAt) { el.textContent = '--:--'; return; }
+    const diff = endsAt - Date.now();
+    if (diff <= 0) { el.textContent = 'Ended'; el.style.color = '#aaa'; return; }
+    const m = Math.floor(diff / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+    if (diff < 60000) el.style.color = '#e94560';
+    else el.style.color = '#ffd700';
+  }
+
+  async function refresh() {
+    await Promise.all([loadLeaderboard(), loadGames()]);
+  }
+
+  async function checkActiveGame() {
+    {% if current_user.is_authenticated %}
+    const me = await api('/api/me');
+    if (me.active_game_id) {
+      const el = document.getElementById('game-alert');
+      el.style.display = 'flex';
+      document.getElementById('game-link').href = `/game/${me.active_game_id}`;
+    }
+    {% endif %}
+  }
+
+  loadTournament();
+  refresh();
+  checkActiveGame();
+  setInterval(refresh, 8000);
+  setInterval(updateTimer, 1000);
+  setInterval(checkActiveGame, 5000);
+</script>
+</body>
+</html>

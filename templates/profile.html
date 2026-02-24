@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ current_user.username }} – Profile</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+    header { background: #16213e; padding: 14px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #0f3460; }
+    header h1 { font-size: 1.3rem; color: #e94560; }
+    a { color: #64b5f6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: #16213e; border: 1px solid #0f3460; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .card h2 { color: #e94560; font-size: 1.05rem; margin-bottom: 12px; }
+    .metric { display: flex; justify-content: space-between; border-bottom: 1px solid #0f3460; padding: 9px 0; font-size: 0.92rem; }
+    .metric:last-child { border-bottom: 0; }
+    .value { font-weight: bold; color: #ffd700; }
+    .value.blue { color: #64b5f6; font-size: 1.25rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 8px 10px; color: #aaa; border-bottom: 1px solid #0f3460; font-size: 0.76rem; text-transform: uppercase; }
+    td { padding: 9px 10px; border-bottom: 1px solid #0f3460; font-size: 0.86rem; }
+    tr:hover td { background: #1e2d4f; }
+    .chart-wrap { height: 240px; border: 1px solid #0f3460; border-radius: 8px; background: #0f1c35; padding: 10px; }
+    .empty { color: #aaa; font-size: 0.9rem; padding-top: 10px; }
+    .win { color: #81c784; font-weight: bold; }
+    .loss { color: #ef9a9a; }
+    .draw { color: #aaa; }
+    .ongoing { color: #ffd54f; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.74rem; }
+    .badge.waiting  { background: #2d5a27; color: #81c784; }
+    .badge.active   { background: #7b1e1e; color: #ef9a9a; }
+    .badge.finished { background: #333; color: #999; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/">← Home</a>
+  <h1>{{ current_user.username }}'s Profile</h1>
+</header>
+
+<div class="container">
+  <div class="grid">
+    <div class="card">
+      <h2>Rating &amp; Stats</h2>
+      <div class="metric">
+        <span>Elo Rating</span>
+        <span class="value">{{ current_user.rating | int }}</span>
+      </div>
+      <div class="metric">
+        <span>Rating Deviation (RD)</span>
+        <span>{{ '%.1f' | format(current_user.rd) }}</span>
+      </div>
+      <div class="metric">
+        <span>Games Played</span>
+        <span>{{ current_user.games_played }}</span>
+      </div>
+      <div class="metric">
+        <span>Performance (last 3 tournaments)</span>
+        <span class="value blue">{{ performance_last_3 if performance_last_3 is not none else '—' }}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Elo Graph (Last 90 Days)</h2>
+      <div id="rating-chart" class="chart-wrap"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Previous Tournaments</h2>
+    {% if tournaments %}
+    <table>
+      <thead>
+        <tr>
+          <th>Tournament</th>
+          <th>Status</th>
+          <th>Score</th>
+          <th>W / D / L</th>
+          <th>Games</th>
+          <th>Performance</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tp, t in tournaments %}
+        <tr style="cursor:pointer;" onclick="window.location='/tournament/{{ t.id }}'">
+          <td><a href="/tournament/{{ t.id }}">{{ t.name }}</a></td>
+          <td><span class="badge {{ t.status }}">{{ t.status }}</span></td>
+          <td style="font-weight:bold;color:#ffd700;">{{ tp.score }}</td>
+          <td>
+            <span class="win">{{ tp.wins }}</span> /
+            <span class="draw">{{ tp.draws }}</span> /
+            <span class="loss">{{ tp.losses }}</span>
+          </td>
+          <td>{{ tp.games_played }}</td>
+          <td style="color:#64b5f6;">{{ tp.performance_rating | int if tp.performance_rating else '—' }}</td>
+          <td><a href="/tournament/{{ t.id }}">View →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No tournaments played yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>All Games</h2>
+    {% if recent_games %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Color</th>
+          <th>Opponent</th>
+          <th>Result</th>
+          <th>Tournament</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in recent_games %}
+        {% set as_white = g.white_id == current_user.id %}
+        {% set opp_name = g.black.username if as_white else g.white.username %}
+        {% if g.result == 'draw' %}
+          {% set me_result = 'Draw' %}
+          {% set res_class = 'draw' %}
+        {% elif (g.result == 'white' and as_white) or (g.result == 'black' and not as_white) %}
+          {% set me_result = 'Win' %}
+          {% set res_class = 'win' %}
+        {% elif g.result == 'ongoing' %}
+          {% set me_result = 'Ongoing' %}
+          {% set res_class = 'ongoing' %}
+        {% else %}
+          {% set me_result = 'Loss' %}
+          {% set res_class = 'loss' %}
+        {% endif %}
+        <tr style="cursor:pointer;" onclick="window.location='/game/{{ g.id }}'">
+          <td>{{ g.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ 'White' if as_white else 'Black' }}</td>
+          <td>{{ opp_name }}</td>
+          <td class="{{ res_class }}">{{ me_result }}</td>
+          <td><a href="/tournament/{{ g.tournament_id }}" onclick="event.stopPropagation()">#{{ g.tournament_id }}</a></td>
+          <td><a href="/game/{{ g.id }}" onclick="event.stopPropagation()">Open →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No games played yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  function drawLineChart(container, points) {
+    if (!container) return;
+    if (!points || !points.length) {
+      container.innerHTML = '<div class="empty">No rating history yet.</div>';
+      return;
+    }
+
+    const w = container.clientWidth - 20;
+    const h = container.clientHeight - 34;
+    const minR = Math.min(...points.map(p => p.rating));
+    const maxR = Math.max(...points.map(p => p.rating));
+    const span = Math.max(1, maxR - minR);
+
+    const pts = points.map((p, i) => {
+      const x = (i / Math.max(1, points.length - 1)) * w;
+      const y = h - ((p.rating - minR) / span) * h;
+      return { x, y, rating: p.rating, ts: p.timestamp };
+    });
+
+    const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+    const areaPath = [
+      `M ${pts[0].x.toFixed(1)},${h}`,
+      ...pts.map(p => `L ${p.x.toFixed(1)},${p.y.toFixed(1)}`),
+      `L ${pts[pts.length-1].x.toFixed(1)},${h}`,
+      'Z'
+    ].join(' ');
+
+    const last = pts[pts.length - 1];
+
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(frac => {
+      const val = Math.round(minR + frac * span);
+      const y = h - frac * h;
+      return `<line x1="0" y1="${y.toFixed(1)}" x2="${w}" y2="${y.toFixed(1)}" stroke="#0f3460" stroke-width="1"/>
+              <text x="2" y="${(y - 2).toFixed(1)}" fill="#555" font-size="9">${val}</text>`;
+    }).join('');
+
+    container.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h + 4}" width="100%" height="${h + 4}">
+        <defs>
+          <linearGradient id="profGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#64b5f6" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#64b5f6" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        ${gridLines}
+        <path d="${areaPath}" fill="url(#profGrad)" />
+        <polyline fill="none" stroke="#64b5f6" stroke-width="2" stroke-linejoin="round" points="${polyline}" />
+        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="#64b5f6" />
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:0.76rem;color:#aaa;margin-top:4px;">
+        <span>Min: ${minR}</span>
+        <span style="color:#64b5f6;font-weight:bold;">Current: ${points[points.length-1].rating}</span>
+        <span>Max: ${maxR}</span>
+      </div>
+    `;
+  }
+
+  async function loadChart() {
+    const res = await fetch('/api/me/rating-history?days=90', { credentials: 'same-origin' });
+    const points = await res.json();
+    drawLineChart(document.getElementById('rating-chart'), points);
+  }
+
+  loadChart();
+  window.addEventListener('resize', loadChart);
+</script>
+</body>
+</html>

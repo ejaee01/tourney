@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arena Tournaments</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+    header { background: #16213e; padding: 14px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #0f3460; }
+    header h1 { font-size: 1.5rem; color: #e94560; }
+    .nav { margin-left: auto; display: flex; gap: 14px; align-items: center; font-size: 0.9rem; }
+    .nav a { color: #64b5f6; text-decoration: none; }
+    .nav .username { color: #ffd700; font-weight: bold; }
+    .container { max-width: 960px; margin: 28px auto; padding: 0 16px; }
+    .card { background: #16213e; border-radius: 10px; padding: 22px; margin-bottom: 22px; border: 1px solid #0f3460; }
+    .card h2 { color: #e94560; margin-bottom: 14px; font-size: 1.1rem; }
+    label { display: block; margin-bottom: 5px; font-size: 0.82rem; color: #aaa; }
+    input, select { width: 100%; padding: 8px 11px; background: #0f3460; border: 1px solid #1a4a8a; border-radius: 6px; color: #e0e0e0; font-size: 0.93rem; margin-bottom: 11px; }
+    button { background: #e94560; color: #fff; border: none; padding: 9px 18px; border-radius: 6px; cursor: pointer; font-size: 0.93rem; }
+    button:hover { background: #c73652; }
+    .msg { margin-top: 7px; font-size: 0.83rem; color: #4caf50; }
+    .msg.err { color: #e94560; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 7px 10px; color: #aaa; font-size: 0.78rem; text-transform: uppercase; border-bottom: 1px solid #0f3460; }
+    td { padding: 9px 10px; border-bottom: 1px solid #0f3460; font-size: 0.88rem; }
+    tr:hover td { background: #1e2d4f; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.74rem; }
+    .badge.waiting  { background: #2d5a27; color: #81c784; }
+    .badge.active   { background: #7b1e1e; color: #ef9a9a; }
+    .badge.finished { background: #333; color: #999; }
+    a { color: #64b5f6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+    .alert { background: #7b3a00; border: 1px solid #ffa000; color: #ffcc80; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; }
+    .alert a { color: #ffd700; font-weight: bold; }
+    .guest-note { background: #0f2a0f; border: 1px solid #2e7d32; color: #a5d6a7; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; font-size: 0.88rem; }
+    .guest-note a { color: #66bb6a; }
+    .chart-label { font-size: 0.82rem; color: #aaa; margin-top: 14px; margin-bottom: 4px; }
+    .mini-chart { height: 160px; border: 1px solid #0f3460; border-radius: 8px; background: #0f1c35; padding: 10px; position: relative; }
+    .perf-highlight { font-size: 1.4rem; font-weight: bold; color: #64b5f6; }
+    .profile-btn { display: inline-block; margin-top: 16px; background: #1a4a8a; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 0.93rem; text-decoration: none; }
+    .profile-btn:hover { background: #2457a2; text-decoration: none; }
+    #ping-bar { position: fixed; left: 14px; bottom: 14px; background: rgba(15,52,96,.92); border: 1px solid #1a4a8a; border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; display: flex; align-items: center; gap: 8px; z-index: 20; }
+    .ping-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+    .ping-bars span { width: 4px; background: #2d5a27; border-radius: 2px; opacity: .3; }
+    .ping-bars span:nth-child(1) { height: 4px; }
+    .ping-bars span:nth-child(2) { height: 6px; }
+    .ping-bars span:nth-child(3) { height: 9px; }
+    .ping-bars span:nth-child(4) { height: 12px; }
+    .ping-bars.good span { background: #81c784; opacity: 1; }
+    .ping-bars.medium span:nth-child(-n+3) { background: #ffd54f; opacity: 1; }
+    .ping-bars.medium span:nth-child(4) { opacity: .2; }
+    .ping-bars.bad span:nth-child(-n+2) { background: #ef9a9a; opacity: 1; }
+    .ping-bars.bad span:nth-child(n+3) { opacity: .2; }
+    .ping-bars.down span { background: #e94560; opacity: .25; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>♟ Arena</h1>
+  <div class="nav">
+    {% if current_user.is_authenticated %}
+      <span class="username">{{ current_user.username }}</span>
+      <span style="color:#aaa">·</span>
+      <span style="color:#aaa">{{ current_user.rating | int }} rating</span>
+      <a href="/logout">Log out</a>
+    {% else %}
+      <a href="/login">Log in</a>
+      <a href="/register" style="background:#e94560;color:#fff;padding:6px 14px;border-radius:6px;">Register</a>
+    {% endif %}
+  </div>
+</header>
+
+<div class="container">
+
+  <div id="game-alert" style="display:none" class="alert">
+    ♟ You have an active game! <a id="game-link" href="#">Go to board →</a>
+  </div>
+
+  {% if not current_user.is_authenticated %}
+  <div class="guest-note">
+    <a href="/register">Register</a> or <a href="/login">log in</a> to join tournaments and play games.
+  </div>
+  {% endif %}
+
+  <div class="grid2">
+    {% if current_user.is_authenticated %}
+    <div class="card">
+      <h2>Your Stats</h2>
+      <table>
+        <tr><td style="color:#aaa">Rating</td><td style="font-weight:bold;color:#ffd700">{{ current_user.rating | int }}</td></tr>
+        <tr><td style="color:#aaa">RD</td><td>{{ "%.1f" | format(current_user.rd) }}</td></tr>
+        <tr><td style="color:#aaa">Games played</td><td>{{ current_user.games_played }}</td></tr>
+        <tr>
+          <td style="color:#aaa">Performance (last 3 tournaments)</td>
+          <td><span class="perf-highlight" id="perf-last-3">—</span></td>
+        </tr>
+      </table>
+
+      <div class="chart-label">Elo graph (last 90 days)</div>
+      <div id="elo-mini-chart" class="mini-chart"></div>
+
+      <a class="profile-btn" href="/profile">View Full Profile →</a>
+    </div>
+    {% endif %}
+
+    {% if current_user.is_authenticated %}
+    <div class="card">
+      <h2>Create Tournament</h2>
+      <label>Name</label>
+      <input id="t-name" placeholder="Blitz Arena" />
+      <label>Duration (minutes)</label>
+      <input id="t-dur" type="number" value="60" min="5" max="180" />
+      <label>Time Control</label>
+      <select id="t-tc">
+        <option value="1+0">1+0 Bullet</option>
+        <option value="2+1">2+1 Bullet</option>
+        <option value="3+0">3+0 Blitz</option>
+        <option value="3+2" selected>3+2 Blitz</option>
+        <option value="5+0">5+0 Blitz</option>
+        <option value="5+3">5+3 Blitz</option>
+        <option value="10+0">10+0 Rapid</option>
+      </select>
+      <label>Starts in (minutes)</label>
+      <input id="t-start" type="number" value="5" min="1" />
+      <button onclick="createTournament()">Create</button>
+      <div id="t-msg" class="msg"></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Tournaments</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Name</th><th>Time Control</th><th>Status</th><th>Ends</th><th></th></tr>
+      </thead>
+      <tbody id="t-list"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Top Players</h2>
+    <table>
+      <thead><tr><th>#</th><th>Player</th><th>Rating</th><th>Games</th></tr></thead>
+      <tbody id="p-list"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div id="ping-bar">
+  <div id="ping-text">Ping: -- ms</div>
+  <div id="ping-bars" class="ping-bars down"><span></span><span></span><span></span><span></span></div>
+</div>
+
+<script>
+  async function api(url, method='GET', body=null) {
+    const opts = { method, headers:{'Content-Type':'application/json'}, credentials:'same-origin' };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    return r.json();
+  }
+
+  async function createTournament() {
+    const msg = document.getElementById('t-msg');
+    const res = await api('/api/tournaments','POST',{
+      name: document.getElementById('t-name').value || 'Arena',
+      duration_minutes: +document.getElementById('t-dur').value,
+      time_control: document.getElementById('t-tc').value,
+      start_in_minutes: +document.getElementById('t-start').value,
+    });
+    if (res.error) { msg.textContent=res.error; msg.className='msg err'; }
+    else { msg.textContent=`Created! ID: ${res.id}`; msg.className='msg'; loadTournaments(); }
+  }
+
+  async function loadTournaments() {
+    const list = await api('/api/tournaments');
+    document.getElementById('t-list').innerHTML = list.map(t=>`
+      <tr>
+        <td>${t.id}</td>
+        <td><a href="/tournament/${t.id}">${t.name}</a></td>
+        <td>${t.time_control}</td>
+        <td><span class="badge ${t.status}">${t.status}</span></td>
+        <td>${t.ends_at ? new Date(t.ends_at+'Z').toLocaleTimeString() : '—'}</td>
+        <td><a href="/tournament/${t.id}">View →</a></td>
+      </tr>`).join('');
+  }
+
+  async function loadPlayers() {
+    const list = await api('/api/players');
+    document.getElementById('p-list').innerHTML = list.slice(0,10).map((p,i)=>`
+      <tr>
+        <td>${i+1}</td>
+        <td>${p.username}${p.provisional?' <sup style="color:#aaa">?</sup>':''}</td>
+        <td style="color:#ffd700;font-weight:bold">${p.rating}</td>
+        <td>${p.games_played}</td>
+      </tr>`).join('');
+  }
+
+  async function checkActiveGame() {
+    {% if current_user.is_authenticated %}
+    const me = await api('/api/me');
+    const perfEl = document.getElementById('perf-last-3');
+    if (perfEl) perfEl.textContent = me.performance_last_3 != null ? me.performance_last_3 : '—';
+    if (me.active_game_id) {
+      document.getElementById('game-alert').style.display = 'flex';
+      document.getElementById('game-link').href = `/game/${me.active_game_id}`;
+    }
+    {% endif %}
+  }
+
+  function drawLineChart(container, points) {
+    if (!container) return;
+    if (!points || !points.length) {
+      container.innerHTML = '<div style="color:#aaa;font-size:0.85rem;padding-top:8px;">No rating history yet.</div>';
+      return;
+    }
+
+    const w = container.clientWidth - 20;
+    const h = container.clientHeight - 30;
+    const minR = Math.min(...points.map(p => p.rating));
+    const maxR = Math.max(...points.map(p => p.rating));
+    const span = Math.max(1, maxR - minR);
+
+    const pts = points.map((p, i) => {
+      const x = (i / Math.max(1, points.length - 1)) * w;
+      const y = h - ((p.rating - minR) / span) * h;
+      return [x, y];
+    });
+
+    const polyline = pts.map(([x,y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+
+    const areaPath = [
+      `M ${pts[0][0].toFixed(1)},${h}`,
+      ...pts.map(([x,y]) => `L ${x.toFixed(1)},${y.toFixed(1)}`),
+      `L ${pts[pts.length-1][0].toFixed(1)},${h}`,
+      'Z'
+    ].join(' ');
+
+    container.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h + 20}" width="100%" height="100%" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#64b5f6" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#64b5f6" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaPath}" fill="url(#chartGrad)" />
+        <polyline fill="none" stroke="#64b5f6" stroke-width="2" points="${polyline}" />
+        <circle cx="${pts[pts.length-1][0].toFixed(1)}" cy="${pts[pts.length-1][1].toFixed(1)}" r="3" fill="#64b5f6" />
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#aaa;margin-top:2px;">
+        <span>${minR}</span>
+        <span style="color:#64b5f6;font-weight:bold;">${points[points.length-1].rating}</span>
+        <span>${maxR}</span>
+      </div>
+    `;
+  }
+
+  async function loadMiniRatingChart() {
+    {% if current_user.is_authenticated %}
+    const points = await api('/api/me/rating-history?days=90');
+    drawLineChart(document.getElementById('elo-mini-chart'), points);
+    {% endif %}
+  }
+
+  function renderPing(ms, ok=true) {
+    const text = document.getElementById('ping-text');
+    const bars = document.getElementById('ping-bars');
+    if (!ok || ms == null) {
+      text.textContent = 'Ping: offline';
+      bars.className = 'ping-bars down';
+      return;
+    }
+    text.textContent = `Ping: ${ms} ms`;
+    if (ms < 120) bars.className = 'ping-bars good';
+    else if (ms < 280) bars.className = 'ping-bars medium';
+    else bars.className = 'ping-bars bad';
+  }
+
+  async function updatePing() {
+    const start = performance.now();
+    try {
+      const r = await fetch('/api/tournaments', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) throw new Error('ping failed');
+      renderPing(Math.round(performance.now() - start), true);
+    } catch (e) {
+      renderPing(null, false);
+    }
+  }
+
+  loadTournaments();
+  loadPlayers();
+  checkActiveGame();
+  loadMiniRatingChart();
+  updatePing();
+
+  setInterval(loadTournaments, 10000);
+  setInterval(checkActiveGame, 5000);
+  setInterval(updatePing, 5000);
+  window.addEventListener('resize', loadMiniRatingChart);
+</script>
+</body>
+</html>
