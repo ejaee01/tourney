@@ -256,7 +256,30 @@ def logout():
 def site_stats():
     total_games_played = Game.query.filter(Game.result != "ongoing").count()
     cutoff = datetime.utcnow() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
-    players_online = Presence.query.filter(Presence.last_seen_at >= cutoff).count()
+    online_ids = {
+        player_id for (player_id,) in (
+            db.session.query(Presence.player_id)
+            .filter(Presence.last_seen_at >= cutoff)
+            .all()
+        )
+    }
+    bot_white_ids = {
+        player_id for (player_id,) in (
+            db.session.query(Game.white_id)
+            .join(Player, Player.id == Game.white_id)
+            .filter(Game.result == "ongoing", Player.title == "BOT")
+            .all()
+        )
+    }
+    bot_black_ids = {
+        player_id for (player_id,) in (
+            db.session.query(Game.black_id)
+            .join(Player, Player.id == Game.black_id)
+            .filter(Game.result == "ongoing", Player.title == "BOT")
+            .all()
+        )
+    }
+    players_online = len(online_ids | bot_white_ids | bot_black_ids)
     return jsonify(
         {
             "total_games_played": total_games_played,

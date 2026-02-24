@@ -126,22 +126,24 @@ def expected_score(rating_a, rd_a, rating_b, rd_b):
 def performance_rating(opponent_ratings, scores):
     """
     Estimate performance rating given a list of opponent ratings and scores (1/0.5/0).
-    Uses iterative search to find rating that matches actual score.
+    Uses a capped logistic inversion around average opponent rating.
     """
     if not opponent_ratings:
         return 1500
 
-    low, high = 0.0, 4000.0
-    for _ in range(50):
-        mid = (low + high) / 2
-        expected = sum(
-            1 / (1 + 10 ** ((opp_r - mid) / 400))
-            for opp_r in opponent_ratings
-        )
-        actual = sum(scores)
-        if expected < actual:
-            low = mid
-        else:
-            high = mid
+    n = len(opponent_ratings)
+    avg_opp = sum(opponent_ratings) / n
+    actual = max(0.0, min(float(sum(scores)), float(n)))
+    score_frac = actual / n
 
-    return round((low + high) / 2)
+    # Perfect/zero scores imply infinite Elo difference in pure logistic math.
+    # Cap to a practical tournament-performance range.
+    max_delta = 800.0
+    if score_frac <= 0.0:
+        return round(avg_opp - max_delta)
+    if score_frac >= 1.0:
+        return round(avg_opp + max_delta)
+
+    delta = -400.0 * math.log10((1.0 / score_frac) - 1.0)
+    delta = max(-max_delta, min(max_delta, delta))
+    return round(avg_opp + delta)
