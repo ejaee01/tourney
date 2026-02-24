@@ -229,7 +229,7 @@ def register_page():
         if email and Player.query.filter_by(email=email).first():
             flash("Email already in use.", "error")
             return render_template("register.html")
-        player = Player(username=username, email=email, rating=500.0, rd=250.0)
+        player = Player(username=username, email=email, rating=800.0, rd=250.0)
         player.set_password(password)
         db.session.add(player)
         db.session.flush()
@@ -1111,7 +1111,7 @@ def admin_create_bot():
     if not get_engine(bot_key):
         return jsonify({"error": "unknown bot engine"}), 400
 
-    rating = data.get("rating", 500)
+    rating = data.get("rating", 800)
     try:
         rating = float(rating)
     except Exception:

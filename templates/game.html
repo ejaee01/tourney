@@ -156,6 +156,9 @@
   let allMoves = [];
   let moveTimesMs = [];
   let viewPly = null;
+  let replayEndWhiteClockMs = 0;
+  let replayEndBlackClockMs = 0;
+  let replayIncrementMs = 2000;
   let pendingPremove = null;
   let premoveSubmitting = false;
   let rightDragStart = null;
@@ -207,6 +210,30 @@
       if (!applyUci(b, allMoves[i])) break;
     }
     return b;
+  }
+
+  function clearUserAnnotations(shouldRender = true) {
+    noteDots.clear();
+    noteArrows.clear();
+    rightDragStart = null;
+    rightDragPreview = null;
+    if (shouldRender) renderAnnotations();
+  }
+
+  function replayClocksAtPly(ply) {
+    const clamped = Math.max(0, Math.min(Number(ply) || 0, allMoves.length));
+    const inc = Math.max(0, Number(replayIncrementMs) || 0);
+    let wc = Math.max(0, Number(replayEndWhiteClockMs) || 0);
+    let bc = Math.max(0, Number(replayEndBlackClockMs) || 0);
+    for (let i = allMoves.length - 1; i >= clamped; i--) {
+      const spent = Math.max(0, Number(moveTimesMs[i]) || 0);
+      if ((i % 2) === 0) {
+        wc = Math.max(0, wc + spent - inc);
+      } else {
+        bc = Math.max(0, bc + spent - inc);
+      }
+    }
+    return { white: wc, black: bc };
   }
 
   function myTurnNow() {
@@ -356,9 +383,15 @@
     const clamped = Math.max(0, Math.min(ply, allMoves.length));
     viewPly = clamped;
     if (gameOver) {
+      const replay = replayClocksAtPly(viewPly);
+      whiteClockMs = replay.white;
+      blackClockMs = replay.black;
+      clockRunningFor = null;
+      lastSync = Date.now();
       game = buildPositionAtPly(viewPly);
       if (board) board.position(game.fen());
     }
+    renderClocks();
     renderMoveList();
     updateMoveNavigator();
     renderMoveHighlight();
@@ -609,15 +642,20 @@
   }
 
 	  function applyState(data) {
+    const previousMoveCount = allMoves.length;
     whiteClockMs   = data.white_clock_ms;
     blackClockMs   = data.black_clock_ms;
+    replayEndWhiteClockMs = Math.max(0, Number(data.white_clock_ms) || 0);
+    replayEndBlackClockMs = Math.max(0, Number(data.black_clock_ms) || 0);
     clockRunningFor = data.clock_running_for;
     lastSync       = Date.now();
+    replayIncrementMs = Math.max(0, Number(data.increment_ms) || 0);
 
     allMoves = (data.pgn_moves || '').split(' ').filter(Boolean);
     moveTimesMs = Array.isArray(data.move_times_ms_list) ? data.move_times_ms_list.map((v) => Math.max(0, Number(v) || 0)) : [];
     while (moveTimesMs.length < allMoves.length) moveTimesMs.push(0);
     if (moveTimesMs.length > allMoves.length) moveTimesMs = moveTimesMs.slice(0, allMoves.length);
+    if (allMoves.length !== previousMoveCount) clearUserAnnotations(false);
 
     gameOver = data.result !== 'ongoing';
     if (!gameOver) {
@@ -668,10 +706,10 @@
 	      statusEl.className   = '';
 	    }
 
-    renderClocks();
     if (gameOver) {
       setViewPly(viewPly);
     } else {
+      renderClocks();
       renderMoveList();
       updateMoveNavigator();
       renderMoveHighlight();
@@ -751,6 +789,7 @@
       return 'snapback';
     }
     board.position(game.fen());
+    clearUserAnnotations();
 
     // now validate and save server-side
     try {

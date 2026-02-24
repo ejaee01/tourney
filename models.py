@@ -28,7 +28,7 @@ class Player(UserMixin, db.Model):
     username = db.Column(db.String(64), unique=True, nullable=False)
     email = db.Column(db.String(128), unique=True, nullable=True)
     password_hash = db.Column(db.String(256), nullable=False, default="")
-    rating = db.Column(db.Float, default=500.0)
+    rating = db.Column(db.Float, default=800.0)
     rd = db.Column(db.Float, default=250.0)
     volatility = db.Column(db.Float, default=0.06)
     games_played = db.Column(db.Integer, default=0)
