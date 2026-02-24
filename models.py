@@ -192,18 +192,21 @@ class Game(db.Model):
                 bc = max(0, bc - elapsed)
         return wc, bc
 
-    def to_dict(self):
+    def to_dict(self, include_global_rank=False):
         wc, bc = self.live_clocks()
-        white_rank = (
-            db.session.query(Player)
-            .filter(Player.rating > self.white.rating)
-            .count() + 1
-        )
-        black_rank = (
-            db.session.query(Player)
-            .filter(Player.rating > self.black.rating)
-            .count() + 1
-        )
+        white_rank = None
+        black_rank = None
+        if include_global_rank:
+            white_rank = (
+                db.session.query(Player)
+                .filter(Player.rating > self.white.rating)
+                .count() + 1
+            )
+            black_rank = (
+                db.session.query(Player)
+                .filter(Player.rating > self.black.rating)
+                .count() + 1
+            )
         return {
             "id": self.id,
             "tournament_id": self.tournament_id,

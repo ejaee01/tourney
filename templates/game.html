@@ -15,6 +15,11 @@
     a:hover { text-decoration: underline; }
     .layout { display: flex; gap: 24px; padding: 20px; max-width: 900px; margin: 0 auto; flex-wrap: wrap; }
     .board-col { flex: 0 0 auto; }
+    #board-wrap { position: relative; width: 480px; }
+    #anno-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; }
+    .anno-arrow { stroke: rgba(32, 104, 210, 0.9); stroke-width: 8; stroke-linecap: round; fill: none; }
+    .anno-arrow.preview { stroke: rgba(32, 104, 210, 0.4); }
+    .anno-dot { fill: rgba(32, 104, 210, 0.42); stroke: rgba(32, 104, 210, 0.85); stroke-width: 2; }
     .side-col { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 14px; }
     .card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 14px; }
     .player-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 4px; margin-bottom: 6px; background: #f5f5f5; border: 1px solid #e0e0e0; }
@@ -77,7 +82,10 @@
         <span id="opponent-rating" class="player-rating" style="margin-left:8px;color:#555;">—</span>
         <span id="opponent-clock" class="clock">—:——</span>
       </div>
-      <div id="board" style="width:480px"></div>
+      <div id="board-wrap">
+        <div id="board" style="width:480px"></div>
+        <svg id="anno-layer"></svg>
+      </div>
       <div id="my-bar" class="player-bar">
         <span id="my-title" style="font-weight:bold;font-size:0.78rem;margin-right:3px;"></span>
         <span id="my-name" class="player-name">—</span>
@@ -129,6 +137,13 @@
   let pollInterval = null;
   let clockInterval = null;
   let pingInterval = null;
+  let pendingPremove = null;
+  let premoveSubmitting = false;
+  let rightDragStart = null;
+  let rightDragPreview = null;
+  const noteDots = new Set();
+  const noteArrows = new Set();
+  const FILES = 'abcdefgh';
 
   function setLoadingError(message) {
     const statusEl = document.getElementById('status');
@@ -141,6 +156,192 @@
     const ratingPart = (rating === null || rating === undefined) ? '' : ` (${rating})`;
     const rankPart = (rank === null || rank === undefined) ? '' : ` (#${rank})`;
     return `${name}${titlePart}${ratingPart}${rankPart}`;
+  }
+
+  function myTurnNow() {
+    return (game.turn() === 'w' && myColor === 'white') ||
+           (game.turn() === 'b' && myColor === 'black');
+  }
+
+  function getBoardSurface() {
+    return document.querySelector('#board .board-b72b1') || document.querySelector('#board [class*="board-"]');
+  }
+
+  function squareFromMouseEvent(evt) {
+    const surface = getBoardSurface();
+    if (!surface) return null;
+    const rect = surface.getBoundingClientRect();
+    const x = evt.clientX - rect.left;
+    const y = evt.clientY - rect.top;
+    if (x < 0 || y < 0 || x >= rect.width || y >= rect.height) return null;
+
+    const size = rect.width / 8;
+    const fileFromLeft = Math.floor(x / size);
+    const rankFromTop = Math.floor(y / size);
+
+    let fileIdx;
+    let rankIdx;
+    if (myColor === 'black') {
+      fileIdx = 7 - fileFromLeft;
+      rankIdx = rankFromTop;
+    } else {
+      fileIdx = fileFromLeft;
+      rankIdx = 7 - rankFromTop;
+    }
+    return `${FILES[fileIdx]}${rankIdx + 1}`;
+  }
+
+  function squareCenter(square) {
+    const surface = getBoardSurface();
+    if (!surface || !square || square.length < 2) return null;
+    const rect = surface.getBoundingClientRect();
+    const size = rect.width / 8;
+
+    const fileIdx = FILES.indexOf(square[0]);
+    const rankIdx = Number(square[1]) - 1;
+    if (fileIdx < 0 || rankIdx < 0 || rankIdx > 7) return null;
+
+    let fileFromLeft;
+    let rankFromTop;
+    if (myColor === 'black') {
+      fileFromLeft = 7 - fileIdx;
+      rankFromTop = rankIdx;
+    } else {
+      fileFromLeft = fileIdx;
+      rankFromTop = 7 - rankIdx;
+    }
+
+    return {
+      x: (fileFromLeft + 0.5) * size,
+      y: (rankFromTop + 0.5) * size,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
+  function renderAnnotations() {
+    const svg = document.getElementById('anno-layer');
+    const surface = getBoardSurface();
+    if (!svg || !surface) return;
+    const rect = surface.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+    svg.innerHTML = `
+      <defs>
+        <marker id="anno-arrow-head" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M 0 0 L 12 6 L 0 12 z" fill="rgba(32, 104, 210, 0.9)"></path>
+        </marker>
+      </defs>
+    `;
+
+    for (const key of noteArrows) {
+      const from = key.slice(0, 2);
+      const to = key.slice(2, 4);
+      const a = squareCenter(from);
+      const b = squareCenter(to);
+      if (!a || !b) continue;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', String(a.x));
+      line.setAttribute('y1', String(a.y));
+      line.setAttribute('x2', String(b.x));
+      line.setAttribute('y2', String(b.y));
+      line.setAttribute('class', 'anno-arrow');
+      line.setAttribute('marker-end', 'url(#anno-arrow-head)');
+      svg.appendChild(line);
+    }
+
+    if (rightDragStart && rightDragPreview && rightDragPreview !== rightDragStart) {
+      const a = squareCenter(rightDragStart);
+      const b = squareCenter(rightDragPreview);
+      if (a && b) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', String(a.x));
+        line.setAttribute('y1', String(a.y));
+        line.setAttribute('x2', String(b.x));
+        line.setAttribute('y2', String(b.y));
+        line.setAttribute('class', 'anno-arrow preview');
+        line.setAttribute('marker-end', 'url(#anno-arrow-head)');
+        svg.appendChild(line);
+      }
+    }
+
+    for (const square of noteDots) {
+      const c = squareCenter(square);
+      if (!c) continue;
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', String(c.x));
+      dot.setAttribute('cy', String(c.y));
+      dot.setAttribute('r', String((rect.width / 8) * 0.18));
+      dot.setAttribute('class', 'anno-dot');
+      svg.appendChild(dot);
+    }
+  }
+
+  function installRightClickNotes() {
+    const wrap = document.getElementById('board-wrap');
+    if (!wrap) return;
+    wrap.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    wrap.addEventListener('mousedown', (e) => {
+      if (e.button !== 2) return;
+      const sq = squareFromMouseEvent(e);
+      if (!sq) return;
+      rightDragStart = sq;
+      rightDragPreview = sq;
+      renderAnnotations();
+      e.preventDefault();
+    });
+
+    wrap.addEventListener('mousemove', (e) => {
+      if (rightDragStart == null) return;
+      const sq = squareFromMouseEvent(e);
+      if (!sq) return;
+      rightDragPreview = sq;
+      renderAnnotations();
+      e.preventDefault();
+    });
+
+    wrap.addEventListener('mouseup', (e) => {
+      if (e.button !== 2 || rightDragStart == null) return;
+      const sq = squareFromMouseEvent(e) || rightDragStart;
+      if (sq === rightDragStart) {
+        if (noteDots.has(sq)) noteDots.delete(sq);
+        else noteDots.add(sq);
+      } else {
+        const key = `${rightDragStart}${sq}`;
+        if (noteArrows.has(key)) noteArrows.delete(key);
+        else noteArrows.add(key);
+      }
+      rightDragStart = null;
+      rightDragPreview = null;
+      renderAnnotations();
+      e.preventDefault();
+    });
+  }
+
+  async function maybeSubmitPremove() {
+    if (SPECTATOR || gameOver || !pendingPremove || premoveSubmitting || !myTurnNow()) return;
+    const promo = pendingPremove.promotion || '';
+    const legal = game.moves({ verbose: true }).some((m) =>
+      m.from === pendingPremove.from &&
+      m.to === pendingPremove.to &&
+      ((m.promotion || '') === promo)
+    );
+    if (!legal) {
+      pendingPremove = null;
+      return;
+    }
+
+    premoveSubmitting = true;
+    try {
+      const data = await api(`/api/games/${GAME_ID}/move`, 'POST', { move: pendingPremove.uci });
+      pendingPremove = null;
+      applyState(data);
+    } catch (e) {
+      pendingPremove = null;
+      await poll();
+    } finally {
+      premoveSubmitting = false;
+    }
   }
 
   async function api(url, method='GET', body=null) {
@@ -234,14 +435,19 @@
 	      if (SPECTATOR) {
 	        statusEl.textContent = game.turn() === 'w' ? 'White to move' : 'Black to move';
 	      } else {
-	        const myTurn = (game.turn() === 'w' && myColor === 'white') ||
-	                       (game.turn() === 'b' && myColor === 'black');
-	        statusEl.textContent = myTurn ? 'Your turn' : "Opponent's turn";
+	        const myTurn = myTurnNow();
+          if (!myTurn && pendingPremove) {
+            statusEl.textContent = `Opponent's turn (premove: ${pendingPremove.from}${pendingPremove.to})`;
+          } else {
+            statusEl.textContent = myTurn ? 'Your turn' : "Opponent's turn";
+          }
 	      }
 	      statusEl.className   = '';
 	    }
 
     renderClocks();
+    renderAnnotations();
+    maybeSubmitPremove();
   }
 
   async function poll() {
@@ -291,7 +497,6 @@
 	    if (gameOver) return false;
 	    if ((myColor === 'white' && piece.startsWith('b')) ||
 	        (myColor === 'black' && piece.startsWith('w'))) return false;
-	    if ((game.turn() === 'w') !== (myColor === 'white')) return false;
 	    return true;
 	  }
 
@@ -299,6 +504,16 @@
 	    if (SPECTATOR) return 'snapback';
 	    const promotion = 'q';
 	    const fullUci = source + target + (isPromotion(source, target) ? promotion : '');
+    const piece = game.get(source);
+    if (!piece) return 'snapback';
+
+    if (!myTurnNow()) {
+      pendingPremove = { from: source, to: target, promotion, uci: fullUci };
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = `Opponent's turn (premove: ${source}${target})`;
+      statusEl.className = '';
+      return 'snapback';
+    }
 
     // optimistically apply move to local board for immediate visual feedback
     const move = game.move({ from: source, to: target, promotion });
@@ -309,13 +524,13 @@
 
     // now validate and save server-side
     try {
-      await api(`/api/games/${GAME_ID}/move`, 'POST', { move: fullUci });
+      const data = await api(`/api/games/${GAME_ID}/move`, 'POST', { move: fullUci });
+      applyState(data);
     } catch (e) {
       game.undo();
       board.position(game.fen());
       return 'snapback';
     }
-    await poll();
   }
 
   function isPromotion(from, to) {
@@ -343,7 +558,7 @@
   async function claimTime() {
     const data = await api(`/api/games/${GAME_ID}/claim-time`, 'POST');
     if (data.ok) await poll();
-    else alert(data.message);
+    else setLoadingError(data.message || 'No opponent clock expired yet');
   }
 
 	  async function init() {
@@ -387,6 +602,8 @@
         return `https://lichess1.org/assets/piece/cburnett/${piece}.svg`;
       },
     });
+    installRightClickNotes();
+    window.addEventListener('resize', renderAnnotations);
 
     applyState(data);
 

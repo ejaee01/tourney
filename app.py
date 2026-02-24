@@ -145,8 +145,8 @@ def _tournament_rank_map(tournament_id):
     return {tp.player_id: i + 1 for i, tp in enumerate(ranked)}
 
 
-def _game_payload(game, rank_map=None):
-    payload = game.to_dict()
+def _game_payload(game, rank_map=None, include_global_rank=False):
+    payload = game.to_dict(include_global_rank=include_global_rank)
     payload["tournament_id"] = game.tournament_id
     if rank_map is None and game.tournament_id:
         rank_map = _tournament_rank_map(game.tournament_id)
@@ -170,6 +170,18 @@ def _queue_bot_move(game_id):
 
     threading.Thread(target=_worker, daemon=True).start()
     return True
+
+
+def _is_bot_turn(game):
+    if not game or game.result != "ongoing":
+        return False
+    try:
+        board = chess.Board(game.fen)
+    except Exception:
+        return False
+    to_move_id = game.white_id if board.turn == chess.WHITE else game.black_id
+    bot = Player.query.get(to_move_id)
+    return bool(bot and bot.title == "BOT" and not bot.banned)
 
 
 # ──────────────────────────────────────────
@@ -622,7 +634,8 @@ def get_game(game_id):
         game.last_clock_update = game.started_at or datetime.utcnow()
         db.session.commit()
     # play bot move in background if needed (non-blocking)
-    _queue_bot_move(game_id)
+    if _is_bot_turn(game):
+        _queue_bot_move(game_id)
     return jsonify(_game_payload(game))
 
 
@@ -698,14 +711,15 @@ def make_move(game_id):
 
     if not result:
         # run bot move in background thread to avoid blocking the response
-        _queue_bot_move(game_id)
+        if _is_bot_turn(game):
+            _queue_bot_move(game_id)
     return jsonify(_game_payload(Game.query.get_or_404(game_id)))
 
 
 def _maybe_play_bot_move(game_id):
     with app.app_context():
         try:
-            game = Game.query.filter_by(id=game_id).with_for_update().first()
+            game = Game.query.filter_by(id=game_id).first()
             if not game or game.result != "ongoing":
                 return False
 
@@ -719,6 +733,7 @@ def _maybe_play_bot_move(game_id):
             if not bot or bot.title != "BOT" or bot.banned:
                 return False
 
+            expected_fen = game.fen
             cfg = BotConfig.query.get(bot.id)
             bot_key = (cfg.bot_key if cfg and cfg.bot_key else "random_capture")
             bot_engine = get_engine(bot_key) or get_engine("random_capture")
@@ -736,8 +751,19 @@ def _maybe_play_bot_move(game_id):
                     return False
                 captures = [m for m in legal if board.is_capture(m)]
                 move = random.choice(captures or legal)
+            # Re-fetch with lock just before applying move to avoid stale writes.
+            game = Game.query.filter_by(id=game_id).with_for_update().first()
+            if not game or game.result != "ongoing" or game.fen != expected_fen:
+                return False
+            board = chess.Board(game.fen)
+            to_move_id = game.white_id if board.turn == chess.WHITE else game.black_id
+            if move not in board.legal_moves:
+                legal = list(board.legal_moves)
+                if not legal:
+                    return False
+                captures = [m for m in legal if board.is_capture(m)]
+                move = random.choice(captures or legal)
             uci = move.uci()
-
             now = datetime.utcnow()
             if game.last_clock_update:
                 elapsed = int((now - game.last_clock_update).total_seconds() * 1000)
@@ -805,22 +831,35 @@ def claim_time(game_id):
     game = Game.query.get_or_404(game_id)
     if game.result != "ongoing":
         return jsonify({"error": "game already over"}), 400
+    if game.white_id != current_user.id and game.black_id != current_user.id:
+        return jsonify({"error": "not your game"}), 403
 
+    now = datetime.utcnow()
     wc, bc = game.live_clocks()
+    # persist a synced clock snapshot so repeated claims reflect server time.
+    game.white_clock_ms = wc
+    game.black_clock_ms = bc
+    game.last_clock_update = now
     result = None
-    if wc <= 0:
-        result = "black"
-    elif bc <= 0:
+    if current_user.id == game.white_id and bc <= 0:
         result = "white"
+    elif current_user.id == game.black_id and wc <= 0:
+        result = "black"
 
     if result:
         game.result = result
-        game.ended_at = datetime.utcnow()
+        game.ended_at = now
         db.session.commit()
         engine.submit_result(game_id, result)
         return jsonify({"ok": True, "result": result})
 
-    return jsonify({"ok": False, "message": "no clock expired"})
+    db.session.commit()
+    return jsonify(
+        {
+            "ok": False,
+            "message": f"no opponent clock expired (white {wc//1000}s, black {bc//1000}s)",
+        }
+    )
 
 
 @app.route("/api/games/<int:game_id>/berserk", methods=["POST"])

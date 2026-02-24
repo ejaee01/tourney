@@ -1,9 +1,10 @@
 """
 Minimax bot with alpha-beta pruning and piece-square tables (PST).
-Depth 3 provides a good balance of strength and speed.
+Fast iterative search (depth 1-2) with a strict node/time budget.
 """
 
 import chess
+import time
 from .registry import BotEngine, register
 
 
@@ -132,19 +133,43 @@ def evaluate(board: chess.Board) -> int:
     return score
 
 
-def minimax(board: chess.Board, depth: int, alpha: int, beta: int, is_maximizing: bool) -> int:
+def _ordered_moves(board: chess.Board):
+    def score(m: chess.Move) -> int:
+        capture = 3 if board.is_capture(m) else 0
+        promo = 2 if m.promotion else 0
+        board.push(m)
+        gives_check = 1 if board.is_check() else 0
+        board.pop()
+        return capture + promo + gives_check
+    return sorted(board.legal_moves, key=score, reverse=True)
+
+
+class SearchBudget:
+    def __init__(self, max_nodes=8000, max_time_sec=0.35):
+        self.max_nodes = max_nodes
+        self.deadline = time.perf_counter() + max_time_sec
+        self.nodes = 0
+
+    def exhausted(self) -> bool:
+        return self.nodes >= self.max_nodes or time.perf_counter() >= self.deadline
+
+
+def minimax(board: chess.Board, depth: int, alpha: int, beta: int, is_maximizing: bool, budget: SearchBudget) -> int:
     """
     Alpha-beta pruning minimax algorithm.
     Returns the best evaluation for the given position.
     """
-    if depth == 0 or board.is_game_over():
+    budget.nodes += 1
+    if depth == 0 or board.is_game_over() or budget.exhausted():
         return evaluate(board)
 
     if is_maximizing:
         max_eval = float("-inf")
-        for move in board.legal_moves:
+        for move in _ordered_moves(board):
+            if budget.exhausted():
+                break
             board.push(move)
-            eval_score = minimax(board, depth - 1, alpha, beta, False)
+            eval_score = minimax(board, depth - 1, alpha, beta, False, budget)
             board.pop()
             max_eval = max(max_eval, eval_score)
             alpha = max(alpha, eval_score)
@@ -153,9 +178,11 @@ def minimax(board: chess.Board, depth: int, alpha: int, beta: int, is_maximizing
         return max_eval
     else:
         min_eval = float("inf")
-        for move in board.legal_moves:
+        for move in _ordered_moves(board):
+            if budget.exhausted():
+                break
             board.push(move)
-            eval_score = minimax(board, depth - 1, alpha, beta, True)
+            eval_score = minimax(board, depth - 1, alpha, beta, True, budget)
             board.pop()
             min_eval = min(min_eval, eval_score)
             beta = min(beta, eval_score)
@@ -168,38 +195,50 @@ def choose_move(board: chess.Board) -> chess.Move:
     """
     Choose the best move using minimax with alpha-beta pruning.
     """
-    best_move = None
-    best_score = float("-inf")
-
+    legal_moves = list(_ordered_moves(board))
+    if not legal_moves:
+        raise ValueError("No legal moves available")
     is_white = board.turn == chess.WHITE
+    best_move = legal_moves[0]
+    budget = SearchBudget(max_nodes=8000, max_time_sec=0.35)
 
-    for move in board.legal_moves:
-        board.push(move)
-        score = minimax(board, depth=3, alpha=float("-inf"), beta=float("inf"), is_maximizing=not is_white)
-        board.pop()
+    # Iterative deepening keeps response quick while still improving quality.
+    for depth in (1, 2):
+        if budget.exhausted():
+            break
+        if is_white:
+            best_score = float("-inf")
+            candidate = best_move
+            for move in legal_moves:
+                if budget.exhausted():
+                    break
+                board.push(move)
+                score = minimax(board, depth - 1, float("-inf"), float("inf"), False, budget)
+                board.pop()
+                if score > best_score:
+                    best_score = score
+                    candidate = move
+        else:
+            best_score = float("inf")
+            candidate = best_move
+            for move in legal_moves:
+                if budget.exhausted():
+                    break
+                board.push(move)
+                score = minimax(board, depth - 1, float("-inf"), float("inf"), True, budget)
+                board.pop()
+                if score < best_score:
+                    best_score = score
+                    candidate = move
+        best_move = candidate
 
-        if is_white and score > best_score:
-            best_score = score
-            best_move = move
-        elif not is_white and score < best_score:
-            best_score = score
-            best_move = move
-
-    if best_move:
-        return best_move
-
-    # fallback to any legal move
-    legal_moves = list(board.legal_moves)
-    if legal_moves:
-        return legal_moves[0]
-
-    raise ValueError("No legal moves available")
+    return best_move
 
 
 register(
     BotEngine(
         key="minimax",
-        name="Minimax (depth 3, α-β)",
+        name="Minimax (fast depth 1-2, α-β)",
         choose_move=choose_move,
     )
 )
