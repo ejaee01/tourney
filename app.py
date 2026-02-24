@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import json
 import random
 import secrets
+import threading
 import chess
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
@@ -569,7 +570,8 @@ def tournament_games(tournament_id):
 
 @app.route("/api/games/<int:game_id>")
 def get_game(game_id):
-    _maybe_play_bot_move(game_id)
+    # play bot move in background if needed (non-blocking)
+    threading.Thread(target=_maybe_play_bot_move, args=(game_id,), daemon=True).start()
     return jsonify(Game.query.get_or_404(game_id).to_dict())
 
 
@@ -644,7 +646,8 @@ def make_move(game_id):
         db.session.commit()
 
     if not result:
-        _maybe_play_bot_move(game_id)
+        # run bot move in background thread to avoid blocking the response
+        threading.Thread(target=_maybe_play_bot_move, args=(game_id,), daemon=True).start()
     return jsonify(Game.query.get_or_404(game_id).to_dict())
 
 

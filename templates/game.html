@@ -270,13 +270,19 @@
 	    const promotion = 'q';
 	    const fullUci = source + target + (isPromotion(source, target) ? promotion : '');
 
-    const data = await api(`/api/games/${GAME_ID}/move`, 'POST', { move: fullUci });
-    if (data.error) {
+    // optimistically apply move to local board for immediate visual feedback
+    const move = new chess.Move(source, target, promotion);
+    if (!game.move(move, { sloppy: true })) {
       return 'snapback';
     }
-    applyState(data);
-  }
+    board.position(game.fen());
 
+    // now validate and save server-side
+    const data = await api(`/api/games/${GAME_ID}/move`, 'POST', { move: fullUci });
+    if (data.error) {
+      // revert on error
+      game.undo();
+      board.position(game.fen());
   function isPromotion(from, to) {
     const piece = game.get(from);
     if (!piece || piece.type !== 'p') return false;
