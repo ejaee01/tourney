@@ -16,6 +16,9 @@
     .layout { display: flex; gap: 24px; padding: 20px; max-width: 900px; margin: 0 auto; flex-wrap: wrap; }
     .board-col { flex: 0 0 auto; }
     #board-wrap { position: relative; width: 480px; }
+    #move-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+    .move-from { fill: rgba(255, 196, 64, 0.45); stroke: rgba(224, 148, 0, 0.85); stroke-width: 2; }
+    .move-to { fill: rgba(255, 228, 128, 0.55); stroke: rgba(224, 148, 0, 0.95); stroke-width: 2; }
     #anno-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; }
     .anno-arrow { stroke: rgba(32, 104, 210, 0.9); stroke-width: 8; stroke-linecap: round; fill: none; }
     .anno-arrow.preview { stroke: rgba(32, 104, 210, 0.4); }
@@ -38,6 +41,13 @@
     #status.lost { background: #fce4ec; color: #c62828; border-color: #ffcdd2; }
     #status.draw { background: #f5f5f5; color: #777; border-color: #e0e0e0; }
     #moves { font-size: 0.82rem; color: #555; max-height: 120px; overflow-y: auto; word-break: break-all; line-height: 1.6; font-family: monospace; }
+    #move-nav { display: none; gap: 8px; align-items: center; margin-bottom: 8px; }
+    #move-nav button { width: auto; margin: 0; padding: 6px 10px; font-size: 0.78rem; }
+    #move-nav-info { color: #666; font-size: 0.78rem; margin-left: auto; }
+    .mv { display: inline-block; padding: 1px 4px; border-radius: 3px; cursor: pointer; }
+    .mv:hover { background: #f3efe3; }
+    .mv.active { background: #f7e4a6; color: #5f4400; }
+    .mv em { color: #888; font-style: normal; font-size: 0.75rem; margin-left: 3px; }
     .berserk-btn { background: #6a1b9a; }
     .berserk-btn:hover { background: #4a0e72; }
     #return-btn { display: none; background: #629924; }
@@ -84,6 +94,7 @@
       </div>
       <div id="board-wrap">
         <div id="board" style="width:480px"></div>
+        <svg id="move-layer"></svg>
         <svg id="anno-layer"></svg>
       </div>
       <div id="my-bar" class="player-bar">
@@ -106,6 +117,11 @@
 
     <div class="card">
       <div style="font-size:0.8rem;color:#777;margin-bottom:6px;">Move list</div>
+      <div id="move-nav">
+        <button class="secondary" id="prev-move-btn" title="Arrow Left">◀</button>
+        <button class="secondary" id="next-move-btn" title="Arrow Right">▶</button>
+        <span id="move-nav-info"></span>
+      </div>
       <div id="moves"></div>
     </div>
   </div>
@@ -137,6 +153,9 @@
   let pollInterval = null;
   let clockInterval = null;
   let pingInterval = null;
+  let allMoves = [];
+  let moveTimesMs = [];
+  let viewPly = null;
   let pendingPremove = null;
   let premoveSubmitting = false;
   let rightDragStart = null;
@@ -156,6 +175,38 @@
     const ratingPart = (rating === null || rating === undefined) ? '' : ` (${rating})`;
     const rankPart = (rank === null || rank === undefined) ? '' : ` (#${rank})`;
     return `${name}${titlePart}${ratingPart}${rankPart}`;
+  }
+
+  function formatMoveTime(ms) {
+    if (ms === null || ms === undefined || Number.isNaN(ms)) return '--';
+    const n = Math.max(0, Number(ms));
+    if (n <= 0) return '--';
+    if (n < 1000) return `${(n / 1000).toFixed(1)}s`;
+    const sec = Math.round(n / 100) / 10;
+    if (sec < 60) return `${sec.toFixed(1)}s`;
+    const m = Math.floor(sec / 60);
+    const s = (sec % 60).toFixed(1).padStart(4, '0');
+    return `${m}:${s}`;
+  }
+
+  function parseUci(uci) {
+    if (!uci || uci.length < 4) return null;
+    return { from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.length > 4 ? uci[4] : undefined };
+  }
+
+  function applyUci(boardObj, uci) {
+    const p = parseUci(uci);
+    if (!p) return null;
+    return boardObj.move({ from: p.from, to: p.to, promotion: p.promotion });
+  }
+
+  function buildPositionAtPly(ply) {
+    const b = new Chess();
+    const clamped = Math.max(0, Math.min(ply, allMoves.length));
+    for (let i = 0; i < clamped; i++) {
+      if (!applyUci(b, allMoves[i])) break;
+    }
+    return b;
   }
 
   function myTurnNow() {
@@ -217,6 +268,138 @@
       width: rect.width,
       height: rect.height,
     };
+  }
+
+  function squareBox(square) {
+    const c = squareCenter(square);
+    if (!c) return null;
+    const size = c.width / 8;
+    return { x: c.x - size / 2, y: c.y - size / 2, size, width: c.width, height: c.height };
+  }
+
+  function renderMoveHighlight() {
+    const svg = document.getElementById('move-layer');
+    const surface = getBoardSurface();
+    if (!svg || !surface) return;
+    const rect = surface.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+    svg.innerHTML = '';
+    if (!allMoves.length || viewPly == null || viewPly <= 0) return;
+
+    const mv = parseUci(allMoves[viewPly - 1]);
+    if (!mv) return;
+    const fromBox = squareBox(mv.from);
+    const toBox = squareBox(mv.to);
+    if (fromBox) {
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', String(fromBox.x + 1.5));
+      r.setAttribute('y', String(fromBox.y + 1.5));
+      r.setAttribute('width', String(fromBox.size - 3));
+      r.setAttribute('height', String(fromBox.size - 3));
+      r.setAttribute('rx', '6');
+      r.setAttribute('class', 'move-from');
+      svg.appendChild(r);
+    }
+    if (toBox) {
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', String(toBox.x + 1.5));
+      r.setAttribute('y', String(toBox.y + 1.5));
+      r.setAttribute('width', String(toBox.size - 3));
+      r.setAttribute('height', String(toBox.size - 3));
+      r.setAttribute('rx', '6');
+      r.setAttribute('class', 'move-to');
+      svg.appendChild(r);
+    }
+  }
+
+  function renderMoveList() {
+    const movesEl = document.getElementById('moves');
+    if (!movesEl) return;
+    if (!allMoves.length) {
+      movesEl.textContent = '';
+      return;
+    }
+    const bits = [];
+    for (let i = 0; i < allMoves.length; i++) {
+      if (i % 2 === 0) bits.push(`<span style="color:#777">${Math.floor(i / 2) + 1}.</span>`);
+      const active = (viewPly === i + 1) ? ' active' : '';
+      const t = formatMoveTime(moveTimesMs[i]);
+      bits.push(`<span class="mv${active}" data-ply="${i + 1}">${allMoves[i]}<em>${t}</em></span>`);
+    }
+    movesEl.innerHTML = bits.join(' ');
+  }
+
+  function updateMoveNavigator() {
+    const nav = document.getElementById('move-nav');
+    const prev = document.getElementById('prev-move-btn');
+    const next = document.getElementById('next-move-btn');
+    const info = document.getElementById('move-nav-info');
+    if (!nav || !prev || !next || !info) return;
+
+    if (!gameOver || !allMoves.length) {
+      nav.style.display = 'none';
+      return;
+    }
+
+    nav.style.display = 'flex';
+    const ply = viewPly == null ? allMoves.length : viewPly;
+    prev.disabled = ply <= 0;
+    next.disabled = ply >= allMoves.length;
+    if (ply <= 0) {
+      info.textContent = `Start position (${allMoves.length} moves)`;
+    } else {
+      info.textContent = `Move ${ply}/${allMoves.length} • ${formatMoveTime(moveTimesMs[ply - 1])}`;
+    }
+  }
+
+  function setViewPly(ply) {
+    const clamped = Math.max(0, Math.min(ply, allMoves.length));
+    viewPly = clamped;
+    if (gameOver) {
+      game = buildPositionAtPly(viewPly);
+      if (board) board.position(game.fen());
+    }
+    renderMoveList();
+    updateMoveNavigator();
+    renderMoveHighlight();
+    renderAnnotations();
+  }
+
+  function stepView(delta) {
+    if (!gameOver) return;
+    const current = viewPly == null ? allMoves.length : viewPly;
+    setViewPly(current + delta);
+  }
+
+  function installMoveNavigator() {
+    const prev = document.getElementById('prev-move-btn');
+    const next = document.getElementById('next-move-btn');
+    const movesEl = document.getElementById('moves');
+    if (prev) prev.addEventListener('click', () => stepView(-1));
+    if (next) next.addEventListener('click', () => stepView(1));
+
+    if (movesEl) {
+      movesEl.addEventListener('click', (e) => {
+        const el = e.target.closest('[data-ply]');
+        if (!el || !gameOver) return;
+        const ply = Number(el.getAttribute('data-ply') || '0');
+        if (!Number.isFinite(ply)) return;
+        setViewPly(ply);
+      });
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (!gameOver) return;
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+      if (tag === 'input' || tag === 'textarea') return;
+      if (e.key === 'ArrowLeft') {
+        stepView(-1);
+        e.preventDefault();
+      } else if (e.key === 'ArrowRight') {
+        stepView(1);
+        e.preventDefault();
+      }
+    });
   }
 
   function renderAnnotations() {
@@ -431,19 +614,26 @@
     clockRunningFor = data.clock_running_for;
     lastSync       = Date.now();
 
-    game.load(data.fen);
-    if (board) board.position(data.fen);
+    allMoves = (data.pgn_moves || '').split(' ').filter(Boolean);
+    moveTimesMs = Array.isArray(data.move_times_ms_list) ? data.move_times_ms_list.map((v) => Math.max(0, Number(v) || 0)) : [];
+    while (moveTimesMs.length < allMoves.length) moveTimesMs.push(0);
+    if (moveTimesMs.length > allMoves.length) moveTimesMs = moveTimesMs.slice(0, allMoves.length);
 
-    const moveList = (data.pgn_moves || '').split(' ').filter(Boolean);
-    document.getElementById('moves').textContent = moveList.join(' ');
+    gameOver = data.result !== 'ongoing';
+    if (!gameOver) {
+      viewPly = allMoves.length;
+      game.load(data.fen);
+      if (board) board.position(data.fen);
+    } else if (viewPly == null || viewPly > allMoves.length) {
+      viewPly = allMoves.length;
+    }
 
     const myIsWhite = myColor === 'white';
     document.getElementById('my-bar').className    = 'player-bar' + ((myIsWhite && data.clock_running_for==='white') || (!myIsWhite && data.clock_running_for==='black') ? ' active' : '');
     document.getElementById('opponent-bar').className = 'player-bar' + ((myIsWhite && data.clock_running_for==='black') || (!myIsWhite && data.clock_running_for==='white') ? ' active' : '');
 
 	    const statusEl = document.getElementById('status');
-	    if (data.result !== 'ongoing') {
-	      gameOver = true;
+	    if (gameOver) {
 	      stopIntervals();
 	      board.draggable = false;
 	      document.getElementById('resign-btn').disabled = true;
@@ -479,8 +669,15 @@
 	    }
 
     renderClocks();
-    renderAnnotations();
-    maybeSubmitPremove();
+    if (gameOver) {
+      setViewPly(viewPly);
+    } else {
+      renderMoveList();
+      updateMoveNavigator();
+      renderMoveHighlight();
+      renderAnnotations();
+      maybeSubmitPremove();
+    }
   }
 
   async function poll() {
@@ -624,7 +821,7 @@
       document.getElementById('opponent-title').textContent = '';
       document.getElementById('my-rating').textContent = '';
       document.getElementById('opponent-rating').textContent = '';
-	    board = Chessboard('board', {
+    board = Chessboard('board', {
 	      draggable: !SPECTATOR,
 	      position: data.fen,
 	      orientation: myColor,
@@ -636,7 +833,11 @@
       },
     });
     installRightClickNotes();
-    window.addEventListener('resize', renderAnnotations);
+    installMoveNavigator();
+    window.addEventListener('resize', () => {
+      renderMoveHighlight();
+      renderAnnotations();
+    });
 
     applyState(data);
 

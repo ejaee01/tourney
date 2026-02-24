@@ -167,6 +167,7 @@ class Game(db.Model):
 
     fen = db.Column(db.Text, default="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
     pgn_moves = db.Column(db.Text, default="")
+    move_times_ms = db.Column(db.Text, default="")
 
     white_clock_ms = db.Column(db.Integer, default=180000)
     black_clock_ms = db.Column(db.Integer, default=180000)
@@ -191,6 +192,17 @@ class Game(db.Model):
             else:
                 bc = max(0, bc - elapsed)
         return wc, bc
+
+    def move_times_list(self):
+        if not self.move_times_ms:
+            return []
+        values = []
+        for token in self.move_times_ms.split():
+            try:
+                values.append(max(0, int(token)))
+            except Exception:
+                values.append(0)
+        return values
 
     def to_dict(self, include_global_rank=False):
         wc, bc = self.live_clocks()
@@ -225,6 +237,7 @@ class Game(db.Model):
             "black_berserk": self.black_berserk,
             "fen": self.fen,
             "pgn_moves": self.pgn_moves,
+            "move_times_ms_list": self.move_times_list(),
             "white_clock_ms": wc,
             "black_clock_ms": bc,
             "increment_ms": self.increment_ms,

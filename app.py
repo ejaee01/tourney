@@ -4,6 +4,7 @@ import random
 import secrets
 import threading
 import chess
+from sqlalchemy import inspect, text
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -55,10 +56,29 @@ engine = ArenaEngine(app)
 _bot_move_lock = threading.Lock()
 _bot_move_inflight = set()
 
+
+def _ensure_runtime_schema():
+    try:
+        inspector = inspect(db.engine)
+        game_columns = {c["name"] for c in inspector.get_columns("games")}
+        statements = []
+        if "move_times_ms" not in game_columns:
+            statements.append("ALTER TABLE games ADD COLUMN move_times_ms TEXT DEFAULT ''")
+        if statements:
+            for stmt in statements:
+                db.session.execute(text(stmt))
+            db.session.commit()
+            print("[schema] Applied runtime schema updates.", flush=True)
+    except Exception as e:
+        db.session.rollback()
+        print(f"[schema] Runtime schema update skipped: {e}", flush=True)
+
+
 with app.app_context():
     for attempt in range(3):
         try:
             db.create_all()
+            _ensure_runtime_schema()
             print(f"Database connected: {_db_url.split('@')[-1] if '@' in _db_url else _db_url}", flush=True)
             break
         except Exception as e:
@@ -72,6 +92,7 @@ with app.app_context():
                     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
                     db.engine.dispose()
                     db.create_all()
+                    _ensure_runtime_schema()
                 else:
                     raise
 
@@ -263,23 +284,14 @@ def site_stats():
             .all()
         )
     }
-    bot_white_ids = {
+    bot_ids = {
         player_id for (player_id,) in (
-            db.session.query(Game.white_id)
-            .join(Player, Player.id == Game.white_id)
-            .filter(Game.result == "ongoing", Player.title == "BOT")
+            db.session.query(Player.id)
+            .filter(Player.title == "BOT", Player.banned == False)
             .all()
         )
     }
-    bot_black_ids = {
-        player_id for (player_id,) in (
-            db.session.query(Game.black_id)
-            .join(Player, Player.id == Game.black_id)
-            .filter(Game.result == "ongoing", Player.title == "BOT")
-            .all()
-        )
-    }
-    players_online = len(online_ids | bot_white_ids | bot_black_ids)
+    players_online = len(online_ids | bot_ids)
     return jsonify(
         {
             "total_games_played": total_games_played,
@@ -692,9 +704,11 @@ def make_move(game_id):
         return jsonify({"error": "illegal move"}), 400
 
     now = datetime.utcnow()
+    move_elapsed_ms = 0
 
     if game.last_clock_update:
         elapsed = int((now - game.last_clock_update).total_seconds() * 1000)
+        move_elapsed_ms = max(0, elapsed)
         if is_white:
             game.white_clock_ms = max(0, game.white_clock_ms - elapsed) + game.increment_ms
         else:
@@ -707,6 +721,9 @@ def make_move(game_id):
     moves = game.pgn_moves.split() if game.pgn_moves else []
     moves.append(uci)
     game.pgn_moves = " ".join(moves)
+    move_times = game.move_times_ms.split() if game.move_times_ms else []
+    move_times.append(str(move_elapsed_ms))
+    game.move_times_ms = " ".join(move_times)
 
     game.clock_running_for = "black" if is_white else "white"
     game.last_clock_update = now
@@ -788,8 +805,10 @@ def _maybe_play_bot_move(game_id):
                 move = random.choice(captures or legal)
             uci = move.uci()
             now = datetime.utcnow()
+            move_elapsed_ms = 0
             if game.last_clock_update:
                 elapsed = int((now - game.last_clock_update).total_seconds() * 1000)
+                move_elapsed_ms = max(0, elapsed)
                 if to_move_id == game.white_id:
                     game.white_clock_ms = max(0, game.white_clock_ms - elapsed) + game.increment_ms
                 else:
@@ -802,6 +821,9 @@ def _maybe_play_bot_move(game_id):
             moves = game.pgn_moves.split() if game.pgn_moves else []
             moves.append(uci)
             game.pgn_moves = " ".join(moves)
+            move_times = game.move_times_ms.split() if game.move_times_ms else []
+            move_times.append(str(move_elapsed_ms))
+            game.move_times_ms = " ".join(move_times)
 
             game.clock_running_for = "black" if to_move_id == game.white_id else "white"
             game.last_clock_update = now
