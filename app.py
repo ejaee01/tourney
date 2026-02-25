@@ -24,6 +24,7 @@ from models import (
 )
 from arena import ArenaEngine
 from bots.registry import get_engine, list_engines
+from glicko2 import performance_rating
 
 app = Flask(__name__)
 import os
@@ -148,6 +149,224 @@ def _performance_last_3_tournaments(player_id):
     if not values:
         return None
     return round(sum(values) / len(values))
+
+
+_PHASE_ORDER = ("opening", "middlegame", "endgame")
+_EVAL_CP = {
+    chess.PAWN: 100,
+    chess.KNIGHT: 320,
+    chess.BISHOP: 330,
+    chess.ROOK: 500,
+    chess.QUEEN: 900,
+    chess.KING: 0,
+}
+
+
+def _quick_eval_white_cp(board):
+    if board.is_checkmate():
+        return -100000 if board.turn == chess.WHITE else 100000
+    if board.is_stalemate() or board.is_insufficient_material():
+        return 0
+    score = 0
+    for piece in board.piece_map().values():
+        val = _EVAL_CP.get(piece.piece_type, 0)
+        score += val if piece.color == chess.WHITE else -val
+    return score
+
+
+def _quick_eval_for_side_cp(board, side_to_move):
+    base = _quick_eval_white_cp(board)
+    return base if side_to_move == chess.WHITE else -base
+
+
+def _phase_from_board(board):
+    non_pawn_material = 0
+    for piece in board.piece_map().values():
+        if piece.piece_type in (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN):
+            non_pawn_material += _EVAL_CP[piece.piece_type]
+
+    if board.fullmove_number <= 10 and non_pawn_material >= 2800:
+        return "opening"
+    if non_pawn_material <= 1400:
+        return "endgame"
+    if not board.pieces(chess.QUEEN, chess.WHITE) and not board.pieces(chess.QUEEN, chess.BLACK):
+        return "endgame"
+    return "middlegame"
+
+
+def _move_cpl_cp(board, move):
+    side = board.turn
+    legal = list(board.legal_moves)
+    if not legal:
+        return 0
+
+    best_eval = None
+    played_eval = None
+    for cand in legal:
+        board.push(cand)
+        eval_cp = _quick_eval_for_side_cp(board, side)
+        board.pop()
+        if best_eval is None or eval_cp > best_eval:
+            best_eval = eval_cp
+        if cand == move:
+            played_eval = eval_cp
+
+    if best_eval is None:
+        return 0
+    if played_eval is None:
+        board.push(move)
+        played_eval = _quick_eval_for_side_cp(board, side)
+        board.pop()
+
+    return max(0, int(round(best_eval - played_eval)))
+
+
+def _rating_to_radar_score(rating):
+    return max(0.0, min(100.0, ((float(rating) - 400.0) / 2600.0) * 100.0))
+
+
+def _cpl_to_radar_score(avg_cpl):
+    # lower CPL is better; clamp to a practical display range
+    clamped = max(0.0, min(300.0, float(avg_cpl)))
+    return max(0.0, min(100.0, 100.0 - (clamped / 300.0) * 100.0))
+
+
+def _profile_phase_radar(player, game_limit=50):
+    game_limit = max(1, min(50, int(game_limit or 50)))
+    games = (
+        Game.query.filter(
+            Game.result != "ongoing",
+            db.or_(Game.white_id == player.id, Game.black_id == player.id),
+        )
+        .order_by(Game.started_at.desc())
+        .limit(game_limit)
+        .all()
+    )
+
+    phase_samples = {
+        phase: {"opp_ratings": [], "scores": []}
+        for phase in _PHASE_ORDER
+    }
+    total_my_cpl = 0
+    total_my_moves = 0
+
+    for g in games:
+        moves = (g.pgn_moves or "").split()
+        if not moves:
+            continue
+
+        my_is_white = g.white_id == player.id
+        opp = g.black if my_is_white else g.white
+        if not opp:
+            continue
+        opp_rating = float(opp.rating)
+
+        per_game = {
+            phase: {"my_sum": 0, "my_n": 0, "opp_sum": 0, "opp_n": 0}
+            for phase in _PHASE_ORDER
+        }
+        board = chess.Board()
+
+        for uci in moves:
+            try:
+                move = chess.Move.from_uci(uci)
+            except Exception:
+                break
+            if move not in board.legal_moves:
+                break
+
+            phase = _phase_from_board(board)
+            cpl = _move_cpl_cp(board, move)
+            mover_is_me = (board.turn == chess.WHITE and my_is_white) or (
+                board.turn == chess.BLACK and not my_is_white
+            )
+
+            bucket = per_game[phase]
+            if mover_is_me:
+                bucket["my_sum"] += cpl
+                bucket["my_n"] += 1
+                total_my_cpl += cpl
+                total_my_moves += 1
+            else:
+                bucket["opp_sum"] += cpl
+                bucket["opp_n"] += 1
+
+            board.push(move)
+
+        for phase in _PHASE_ORDER:
+            b = per_game[phase]
+            if b["my_n"] <= 0 or b["opp_n"] <= 0:
+                continue
+            my_avg = b["my_sum"] / b["my_n"]
+            opp_avg = b["opp_sum"] / b["opp_n"]
+            # Better phase play = lower CPL than opponent. Convert to [0,1] score.
+            score = max(0.0, min(1.0, 0.5 + (opp_avg - my_avg) / 200.0))
+            phase_samples[phase]["opp_ratings"].append(opp_rating)
+            phase_samples[phase]["scores"].append(score)
+
+    phase_perf = {}
+    phase_counts = {}
+    for phase in _PHASE_ORDER:
+        opps = phase_samples[phase]["opp_ratings"]
+        scores = phase_samples[phase]["scores"]
+        phase_counts[phase] = len(scores)
+        if opps and scores:
+            phase_perf[phase] = round(
+                performance_rating(
+                    opps,
+                    scores,
+                    prior_rating=player.rating,
+                    prior_games=6,
+                )
+            )
+        else:
+            phase_perf[phase] = None
+
+    avg_cpl = round(total_my_cpl / total_my_moves, 1) if total_my_moves else None
+    elo = round(player.rating)
+    opening_raw = phase_perf["opening"] if phase_perf["opening"] is not None else elo
+    middlegame_raw = phase_perf["middlegame"] if phase_perf["middlegame"] is not None else elo
+    endgame_raw = phase_perf["endgame"] if phase_perf["endgame"] is not None else elo
+
+    axes = [
+        {"key": "elo", "label": "Elo", "value": round(_rating_to_radar_score(elo), 2), "raw": elo},
+        {
+            "key": "opening",
+            "label": "Opening",
+            "value": round(_rating_to_radar_score(opening_raw), 2),
+            "raw": opening_raw,
+        },
+        {
+            "key": "middlegame",
+            "label": "Middlegame",
+            "value": round(_rating_to_radar_score(middlegame_raw), 2),
+            "raw": middlegame_raw,
+        },
+        {
+            "key": "endgame",
+            "label": "Endgame",
+            "value": round(_rating_to_radar_score(endgame_raw), 2),
+            "raw": endgame_raw,
+        },
+        {
+            "key": "cpl",
+            "label": "CPL",
+            "value": round(_cpl_to_radar_score(avg_cpl if avg_cpl is not None else 300.0), 2),
+            "raw": avg_cpl,
+        },
+    ]
+
+    return {
+        "player_id": player.id,
+        "sample_size": len(games),
+        "elo": elo,
+        "opening_perf": phase_perf["opening"],
+        "middlegame_perf": phase_perf["middlegame"],
+        "endgame_perf": phase_perf["endgame"],
+        "avg_cpl": avg_cpl,
+        "phase_samples": phase_counts,
+        "axes": axes,
+    }
 
 
 def _tournament_rank_map(tournament_id):
@@ -361,6 +580,13 @@ def player_rating_history(player_id):
         points.append({"timestamp": now.isoformat(), "rating": round(player.rating)})
 
     return jsonify(points)
+
+
+@app.route("/api/players/<int:player_id>/phase-radar")
+def player_phase_radar(player_id):
+    limit = request.args.get("games", 50, type=int) or 50
+    player = Player.query.get_or_404(player_id)
+    return jsonify(_profile_phase_radar(player, game_limit=limit))
 
 
 @app.route("/api/bots")
