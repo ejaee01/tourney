@@ -779,8 +779,9 @@
 
 	  async function onDrop(source, target) {
 	    if (SPECTATOR) return 'snapback';
-	    const promotion = 'q';
-	    const fullUci = source + target + (isPromotion(source, target) ? promotion : '');
+	    const isPromo = isPromotion(source, target);
+	    const promotion = isPromo ? 'q' : '';
+	    const fullUci = source + target + promotion;
     const piece = game.get(source);
     if (!piece) return 'snapback';
 
@@ -793,7 +794,7 @@
     }
 
     // optimistically apply move to local board for immediate visual feedback
-    const move = game.move({ from: source, to: target, promotion });
+    const move = game.move({ from: source, to: target, promotion: isPromo ? promotion : undefined });
     if (!move) {
       return 'snapback';
     }
