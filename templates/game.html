@@ -780,7 +780,8 @@
 	  async function onDrop(source, target) {
 	    if (SPECTATOR) return 'snapback';
 	    const isPromo = isPromotion(source, target);
-	    const promotion = isPromo ? 'q' : '';
+	    const promotion = isPromo ? choosePromotionPiece() : '';
+	    if (isPromo && !promotion) return 'snapback';
 	    const fullUci = source + target + promotion;
     const piece = game.get(source);
     if (!piece) return 'snapback';
@@ -788,7 +789,7 @@
     if (!myTurnNow()) {
       pendingPremove = { from: source, to: target, promotion, uci: fullUci };
       const statusEl = document.getElementById('status');
-      statusEl.textContent = `Opponent's turn (premove: ${source}${target})`;
+      statusEl.textContent = `Opponent's turn (premove: ${source}${target}${promotion || ''})`;
       statusEl.className = '';
       return 'snapback';
     }
@@ -817,6 +818,15 @@
     if (!piece || piece.type !== 'p') return false;
     return (piece.color === 'w' && to[1] === '8') ||
            (piece.color === 'b' && to[1] === '1');
+  }
+
+  function choosePromotionPiece() {
+    const raw = window.prompt('Promote to: q, r, b, n', 'q');
+    if (raw === null) return null;
+    const v = String(raw || '').trim().toLowerCase();
+    if (!v) return 'q';
+    if (v === 'q' || v === 'r' || v === 'b' || v === 'n') return v;
+    return 'q';
   }
 
   function onSnapEnd() {
